@@ -453,7 +453,9 @@
 (extend-type CUdevice
   Info
   (info
-    ([d info-type]
-     (maybe ((device-attributes info-type) d)))
+    ([d attribute]
+     (if-let [attribute-fn (device-attributes attribute)]
+       (maybe (attribute-fn d))
+       (throw (ex-info "Unknown attribute." {:attribute attribute}))))
     ([d]
      (fmap #(maybe (% d)) device-attributes))))
