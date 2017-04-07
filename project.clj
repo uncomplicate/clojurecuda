@@ -16,7 +16,8 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.jcuda/jcuda "0.8.0"]
                  [org.clojure/core.async "0.2.395"]
-                 [uncomplicate/commons "0.3.0-SNAPSHOT"]]
+                 [uncomplicate/commons "0.3.0"]
+                 [uncomplicate/fluokitten "0.6.0"]]
 
   :codox {:metadata {:doc/format :markdown}
           :src-dir-uri "http://github.com/uncomplicate/clojurecuda/blob/master/"

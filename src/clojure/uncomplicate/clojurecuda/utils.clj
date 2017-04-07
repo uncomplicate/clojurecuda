@@ -16,11 +16,6 @@
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer DirectByteBuffer]))
 
-;; ========= Bitfild masks ========================================
-
-
-;; ========== Error handling ======================================
-
 (defn error
   "Converts an CUDA error code to an [ExceptionInfo]
   (http://clojuredocs.org/clojure.core/ex-info)
@@ -71,3 +66,13 @@
   "
   [err-code form]
   `(with-check (aget (ints ~err-code) 0) ~form))
+
+(defmacro maybe
+  "Evaluates form in try/catch block; if a CUDA-related exception is caught,
+  substitutes the result with the [ExceptionInfo](http://clojuredocs.org/clojure.core/ex-info) object."
+  [form]
+  `(try ~form
+         (catch ExceptionInfo ex-info#
+           (if (= :cuda-error (:type (ex-data ex-info#)))
+             (:name (ex-data ex-info#))
+             (throw ex-info#)))))

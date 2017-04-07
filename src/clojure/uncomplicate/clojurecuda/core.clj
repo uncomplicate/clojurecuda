@@ -44,8 +44,7 @@
     (with-check (JCudaDriver/cuMemFree m) true)))
 
 (defn init []
-  (with-check (JCudaDriver/cuInit 0)
-    true))
+  (with-check (JCudaDriver/cuInit 0) true))
 
 ;; ================== Device ====================================
 
@@ -143,7 +142,7 @@
       (with-check err pp))
     (ByteBuffer/allocateDirect 0)))
 
-(defn mem-host-alloc [^long req-size flags]
+#_(defn mem-host-alloc [^long req-size flags]
   (mem-host-alloc* req-size (if (keyword? flags)
                               (mem-host-alloc-flags flags)
                               (mask mem-host-alloc-flags flags))))
