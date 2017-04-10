@@ -20,21 +20,22 @@
 
 ;; ==================== Keyword mapping ======================================
 
-(def ctx-flags
+(def ^{:doc "Available context flags defined in the CUDA standard.
+See [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html#group__CUDA__CTX_1g65dc0012348bc84810e2103a40d8e2cf)."}
+  ctx-flags
   {:sched-auto CUctx_flags/CU_CTX_SCHED_AUTO
    :sched-spin CUctx_flags/CU_CTX_SCHED_SPIN
    :sched-yield CUctx_flags/CU_CTX_SCHED_YIELD
-   :block-sync CUctx_flags/CU_CTX_BLOCKING_SYNC
    :sched-blocking-sync CUctx_flags/CU_CTX_SCHED_BLOCKING_SYNC
-   :sched-mask CUctx_flags/CU_CTX_SCHED_MASK
-   :lmem-resize-to-max CUctx_flags/CU_CTX_LMEM_RESIZE_TO_MAX
-   :flags-mask CUctx_flags/CU_CTX_FLAGS_MASK})
+   :map-host CUctx_flags/CU_CTX_MAP_HOST
+   :lmem-resize-to-max CUctx_flags/CU_CTX_LMEM_RESIZE_TO_MAX})
 
-(def mem-host-alloc-flags
+(def ^{:doc "Available flags for the [[core/mem-host-alloc]] function.
+See [cuCtxMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1g572ca4011bfcb25034888a14d4e035b9)."}
+  mem-host-alloc-flags
   {:portable JCudaDriver/CU_MEMHOSTALLOC_PORTABLE
-   :device-map JCudaDriver/CU_MEMHOSTALLOC_DEVICEMAP
-   :write-combined JCudaDriver/CU_MEMHOSTALLOC_WRITECOMBINED})
-
+   :devicemap JCudaDriver/CU_MEMHOSTALLOC_DEVICEMAP
+   :writecombined JCudaDriver/CU_MEMHOSTALLOC_WRITECOMBINED})
 
 
 (def device-attributes-special

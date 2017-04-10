@@ -10,6 +10,8 @@
     uncomplicate.clojurecuda.core
   "Core ClojureCUDA functions for CUDA **host** programming. The kernels should
   be provided as strings (that may be stored in files), written in CUDA C.
+
+  Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
              [core :refer [Releaseable release]]
@@ -27,10 +29,6 @@
        :doc "Dynamic var for binding the default context."}
   *context*)
 
-(def ^{:dynamic true
-       :doc "Dynamic var for binding the default command queue."}
-  *command-queue*)
-
 ;; ==================== Release resources =======================
 
 (extend-type CUcontext
@@ -43,44 +41,54 @@
   (release [m]
     (with-check (JCudaDriver/cuMemFree m) true)))
 
-(defn init []
+(defn init
+  "Initializes the CUDA driver."
+  []
   (with-check (JCudaDriver/cuInit 0) true))
 
 ;; ================== Device ====================================
 
-(defn device-count ^long []
+(defn device-count
+  "Returns the number of CUDA devices on the system."
+  ^long []
   (let [res (int-array 1)
         err (JCudaDriver/cuDeviceGetCount res)]
     (with-check err (aget res 0))))
 
-(defn device [^long ord]
+(defn device
+  "Returns a device specified with its ordinal number `ord`."
+  [^long ord]
   (let [res (CUdevice.)
         err (JCudaDriver/cuDeviceGet res ord)]
     (with-check err res)))
 
 ;; =================== Context ==================================
 
-(defn context* [dev ^long flags]
+(defn context*
+  "Creates a CUDA context on the `device` using a raw integer `flag`.
+  For available flags, see [[constants/ctx-flags]].
+  "
+  [dev ^long flags]
   (let [res (CUcontext.)
         err (JCudaDriver/cuCtxCreate res flags dev)]
     (with-check err res)))
 
 (defn context
+  "Creates a CUDA context on the `device` using a keyword `flag`.
+  For available flags, see [[constants/ctx-flags]]. Must be released after use.
+
+  Also see [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html#group__CUDA__CTX_1g65dc0012348bc84810e2103a40d8e2cf).
+  "
   ([dev flag]
-   (context* dev (ctx-flags flag)))
+   (context* dev (or (ctx-flags flag) (throw (ex-info "Unknown context flag." {:flag flag})))))
   ([dev]
    (context* dev 0)))
 
 (defmacro with-context
-  "Dynamically binds `context` to the default context [[*context*]].
-  and evaluates the body with that binding. Releases the context
-  in the `finally` block. Take care *not* to release that context in
-  some other place; JVM might crash.
+  "Dynamically binds `context` to the default context [[*context*]], and evaluates the body with
+  the binding. Releases the context in the `finally` block.
 
-  Example:
-
-      (with-context (context (device 0))
-          (context-info))
+  Take care *not* to release that context again in some other place; JVM might crash.
   "
   [context & body]
   `(binding [*context* ~context]
@@ -109,6 +117,8 @@
   (memcpy-to-host* [this host bytes] [this host bytes hstream])
   (memcpy-from-host* [this host bytes] [this host bytes hstream]))
 
+;; ==================== Linear Memory ================================================
+
 (deftype CULinearMemory [^CUdeviceptr cu ^long s]
   Releaseable
   (release [_]
@@ -130,22 +140,69 @@
   (memcpy-from-host* [this host byte-size hstream]
     (with-check (JCudaDriver/cuMemcpyHtoDAsync cu (ptr host) byte-size hstream) this)))
 
-(defn mem-alloc [^long size]
+(defn mem-alloc
+  "Allocates the `size` bytes of memory on the device. Returns a [[CULinearmemory]] object.
+
+  The memory is not cleared. `size` must be greater than `0`.
+
+  See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb82d2a09844a58dd9e744dc31e8aa467).
+  "
+  [^long size]
   (let [res (CUdeviceptr.)
         err (JCudaDriver/cuMemAlloc res size)]
     (with-check err (->CULinearMemory res size))))
 
-#_(defn mem-host-alloc* [^long req-size ^long flags]
-  (if (< 0 req-size)
-    (let [pp (Pointer.)
-          err (JCudaDriver/cuMemHostAlloc pp req-size flags)]
-      (with-check err pp))
-    (ByteBuffer/allocateDirect 0)))
+;; =================== Pinned Memory ================================================
 
-#_(defn mem-host-alloc [^long req-size flags]
-  (mem-host-alloc* req-size (if (keyword? flags)
-                              (mem-host-alloc-flags flags)
-                              (mask mem-host-alloc-flags flags))))
+(defn mem-host-alloc*
+  "Allocates `size` bytes of page-locked, 'pinned' on the host, using raw integer `flags`.
+  For available flags, see [constants/mem-host-alloc-flags]
+
+  The memory is not cleared. `size` must be greater than `0`.
+
+  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1g572ca4011bfcb25034888a14d4e035b9).
+  "
+  [^long size ^long flags]
+  (let [pp (Pointer.)
+        err (JCudaDriver/cuMemHostAlloc pp size flags)]
+    (with-check err (.order (.getByteBuffer pp 0 size) (ByteOrder/nativeOrder)))))
+
+(defn mem-host-alloc
+  "Allocates `size` bytes of page-locked, 'pinned' on the host, using keyword `flags`.
+  For available flags, see [constants/mem-host-alloc-flags]
+
+  The memory is not cleared. `size` must be greater than `0`.
+
+  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1g572ca4011bfcb25034888a14d4e035b9).
+  "
+  ([^long size flags]
+   (mem-host-alloc* size (if (keyword? flags)
+                           (or (mem-host-alloc-flags flags)
+                               (throw (ex-info "Unknown mem-host-alloc flag." {:flag flags})))
+                           (mask mem-host-alloc-flags flags))))
+  (^ByteBuffer [^long size]
+   (mem-host-alloc* size 0)))
+
+(defn device-ptr
+  "TODO"
+  [buf]
+  (let [res (CUdeviceptr.)
+        err (JCudaDriver/cuMemHostGetDevicePointer res (ptr buf) 0)]
+    (with-check err (->CULinearMemory res (size buf)))))
+
+(defn mem-alloc-host
+  "Allocates `size` bytes of page-locked, 'pinned' on the host.
+
+  The memory is not cleared. `size` must be greater than `0`.
+
+  See [cuMemAllocHost](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gdd8311286d2c2691605362c689bc64e0).
+  "
+  [^long size]
+  (let [pp (Pointer.)
+        err (JCudaDriver/cuMemAllocHost pp size)]
+    (with-check err (.order (.getByteBuffer pp 0 size) (ByteOrder/nativeOrder)))))
+
+;; ================== Memcpy variants ==============================================
 
 (defn memcpy!
   ([src dst ^long byte-count]
@@ -157,7 +214,7 @@
 
 (defn memcpy-host!
   ([src dst ^long byte-count]
-   ((memcpy-host* src) src dst  byte-count))
+   ((memcpy-host* src) src dst byte-count))
   ([src dst]
    (memcpy-host! src dst (min (long (size src)) (long (size dst))))))
 

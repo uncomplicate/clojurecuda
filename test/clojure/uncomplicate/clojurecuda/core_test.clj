@@ -30,16 +30,22 @@
  "Context tests"
  (let [dev (device 0)
        ctx (context* dev 0)]
-    ctx => truthy
-    (release ctx) => true
-    (context dev :unknown) => (throws NullPointerException)
-    (with-context (context dev :block-sync)
-      *context* => truthy)))
+   ctx => truthy
+   (release ctx) => true
+   (context dev :unknown) => (throws ExceptionInfo)
+   (with-context (context dev :sched-blocking-sync)
+     *context* => truthy)))
 
-(with-context (context (device 0))
+(with-context (context (device 0) :map-host)
 
   (facts
-   "Linear memory tests"
+   "mem-alloc tests."
+   (mem-alloc 0) => (throws ExceptionInfo)
+   (with-release [buf (mem-alloc Float/BYTES)]
+     (size buf) => Float/BYTES))
+
+  (facts
+   "Linear memory tests."
    (with-release [cuda1 (mem-alloc Float/BYTES)
                   cuda2 (mem-alloc Float/BYTES)
                   host1 (float-array [173.0])
@@ -47,4 +53,26 @@
      (memcpy-host! host1 cuda1) => cuda1
      (memcpy! cuda1 cuda2) => cuda2
      (memcpy-host! cuda2 host2) => host2
-     (.getFloat ^ByteBuffer host2 0) => 173.0)))
+     (.getFloat ^ByteBuffer host2 0) => 173.0))
+
+  (facts
+   "mem-host-alloc tests."
+   (with-release [mapped-host (mem-host-alloc Float/BYTES :devicemap)
+                  host (float-array 1)]
+     (let [cuda (device-ptr mapped-host)]
+       (mem-host-alloc Float/BYTES :unknown) => (throws ExceptionInfo)
+       (size mapped-host) => Float/BYTES
+       (.putFloat ^ByteBuffer mapped-host 0 13) => mapped-host
+       (memcpy-host! cuda host) => host
+       (aget ^floats host 0) => 13.0)))
+
+  (facts
+   "mem-alloc-host tests."
+   (with-release [mapped-host (mem-alloc-host Float/BYTES)
+                  host (float-array 1)]
+     (let [cuda (device-ptr mapped-host)]
+       (size mapped-host) => Float/BYTES
+       (.putFloat ^ByteBuffer mapped-host 0 14) => mapped-host
+       (memcpy-host! cuda host) => host
+       (aget ^floats host 0) => 14.0)))
+  )
