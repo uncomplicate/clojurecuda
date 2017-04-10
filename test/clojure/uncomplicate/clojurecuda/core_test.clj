@@ -59,22 +59,20 @@
    "mem-host-alloc tests."
    (with-release [mapped-host (mem-host-alloc Float/BYTES :devicemap)
                   host (float-array 1)]
-     (let [cuda (device-ptr mapped-host)]
-       (mem-host-alloc Float/BYTES :unknown) => (throws ExceptionInfo)
-       (size mapped-host) => Float/BYTES
-       (.putFloat ^ByteBuffer mapped-host 0 13) => mapped-host
-       (memcpy-host! cuda host) => host
-       (aget ^floats host 0) => 13.0)))
+     (mem-host-alloc Float/BYTES :unknown) => (throws ExceptionInfo)
+     (size mapped-host) => Float/BYTES
+     (.putFloat ^ByteBuffer (host-buffer mapped-host) 0 13) => (host-buffer mapped-host)
+     (memcpy-host! mapped-host host) => host
+     (aget ^floats host 0) => 13.0))
 
   (facts
    "mem-alloc-host tests."
    (with-release [mapped-host (mem-alloc-host Float/BYTES)
                   host (float-array 1)]
-     (let [cuda (device-ptr mapped-host)]
-       (size mapped-host) => Float/BYTES
-       (.putFloat ^ByteBuffer mapped-host 0 14) => mapped-host
-       (memcpy-host! cuda host) => host
-       (aget ^floats host 0) => 14.0)))
+     (size mapped-host) => Float/BYTES
+     (.putFloat ^ByteBuffer (host-buffer mapped-host) 0 14) => (host-buffer mapped-host)
+     (memcpy-host! mapped-host host) => host
+     (aget ^floats host 0) => 14.0))
 
   (facts
    "mem-alloc-managed tests."

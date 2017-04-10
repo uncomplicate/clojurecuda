@@ -38,8 +38,8 @@
 
 (extend-type CUdeviceptr
   Releaseable
-  (release [m]
-    (with-check (JCudaDriver/cuMemFree m) true)))
+  (release [dp]
+    (with-check (JCudaDriver/cuMemFree dp) true)))
 
 (defn init
   "Initializes the CUDA driver."
@@ -105,11 +105,9 @@
   "An object that represents memory that participates in CUDA operations.
   It can be on the device, or on the host.  Built-in implementations:
   cuda pointers, Java primitive arrays and ByteBuffers"
-  (ptr [this]
-    "CUDA `Pointer` to this object.")
   (size [this]
     "Memory size of this cuda or host object in bytes.")
-  (memcpy-host* [this]))
+  (memcpy-host* [this host size] [this host size hstream]))
 
 (defprotocol CUMem
   "A wrapper for CUdeviceptr objects, that also holds a Pointer to the cuda memory
@@ -117,11 +115,35 @@
   functions that need that (redundant in Java) data because of the C background
   of CUDA functions."
   (cu-ptr [this]
-    "The raw JCuda memory object.")
-  (memcpy-to-host* [this host bytes] [this host bytes hstream])
-  (memcpy-from-host* [this host bytes] [this host bytes hstream]))
+    "The raw JCuda memory object."))
 
-;; ==================== Linear Memory ================================================
+(defprotocol HostMem
+  (ptr [this]
+    "CUDA `Pointer` to this object.")
+  (host-buffer [this]
+    "The actual `ByteBuffer` on the host"))
+
+;; ================== Polymorphic memcpy  ==============================================
+
+(defn memcpy!
+  ([src dst ^long byte-count]
+   (with-check
+     (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) byte-count)
+     dst))
+  ([src dst]
+   (memcpy! src dst (min (long (size src)) (long (size dst))))))
+
+(defn memcpy-host!
+  ([src dst ^long byte-count hstream]
+   (memcpy-host* src dst byte-count hstream))
+  ([src dst arg]
+   (if (integer? arg)
+     (memcpy-host* src dst arg)
+     (memcpy-host* src dst (min (long (size src)) (long (size dst))) arg)))
+  ([src dst]
+   (memcpy-host* src dst (min (long (size src)) (long (size dst))))))
+
+;; ==================== Linear memory ================================================
 
 (deftype CULinearMemory [^CUdeviceptr cu ^long s]
   Releaseable
@@ -130,19 +152,13 @@
   Mem
   (size [_]
     s)
-  (memcpy-host* [this]
-    memcpy-to-host*)
+  (memcpy-host* [this host byte-size]
+    (with-check (JCudaDriver/cuMemcpyDtoH (ptr host) cu byte-size) host))
+  (memcpy-host* [this host byte-size hstream]
+    (with-check (JCudaDriver/cuMemcpyDtoHAsync (ptr host) cu byte-size hstream) host))
   CUMem
   (cu-ptr [_]
-    cu)
-  (memcpy-to-host* [this host byte-size]
-    (with-check (JCudaDriver/cuMemcpyDtoH (ptr host) cu byte-size) host))
-  (memcpy-to-host* [this host byte-size hstream]
-    (with-check (JCudaDriver/cuMemcpyDtoHAsync (ptr host) cu byte-size hstream) host))
-  (memcpy-from-host* [this host byte-size]
-    (with-check (JCudaDriver/cuMemcpyHtoD cu (ptr host) byte-size) this))
-  (memcpy-from-host* [this host byte-size hstream]
-    (with-check (JCudaDriver/cuMemcpyHtoDAsync cu (ptr host) byte-size hstream) this)))
+    cu))
 
 (defn mem-alloc
   "Allocates the `size` bytes of memory on the device. Returns a [[CULinearmemory]] object.
@@ -189,6 +205,26 @@
 
 ;; =================== Pinned Memory ================================================
 
+(deftype CUPinnedMemory [^CUdeviceptr cu ^Pointer p ^ByteBuffer buf ^long s]
+  Releaseable
+  (release [_]
+    (with-check (JCudaDriver/cuMemFreeHost p) (release buf)))
+  HostMem
+  (ptr [_]
+    p)
+  (host-buffer [_]
+    buf)
+  Mem
+  (size [_]
+    s)
+  (memcpy-host* [this host byte-size]
+    (with-check (JCudaDriver/cuMemcpyDtoH (ptr host) cu byte-size) host))
+  (memcpy-host* [this host byte-size hstream]
+    (with-check (JCudaDriver/cuMemcpyDtoHAsync (ptr host) cu byte-size hstream) host))
+  CUMem
+  (cu-ptr [_]
+    cu))
+
 (defn mem-host-alloc*
   "Allocates `size` bytes of page-locked, 'pinned' on the host, using raw integer `flags`.
   For available flags, see [constants/mem-host-alloc-flags]
@@ -199,8 +235,12 @@
   "
   [^long size ^long flags]
   (let [pp (Pointer.)
+        cu (CUdeviceptr.)
         err (JCudaDriver/cuMemHostAlloc pp size flags)]
-    (with-check err (.order (.getByteBuffer pp 0 size) (ByteOrder/nativeOrder)))))
+    (with-check err
+      (let [err (JCudaDriver/cuMemHostGetDevicePointer cu pp 0)]
+        (with-check err
+          (->CUPinnedMemory cu pp (.order (.getByteBuffer pp 0 size) (ByteOrder/nativeOrder)) size))))))
 
 (defn mem-host-alloc
   "Allocates `size` bytes of page-locked, 'pinned' on the host, using keyword `flags`.
@@ -220,13 +260,6 @@
   (^ByteBuffer [^long size]
    (mem-host-alloc* size 0)))
 
-(defn device-ptr
-  "TODO"
-  [buf]
-  (let [res (CUdeviceptr.)
-        err (JCudaDriver/cuMemHostGetDevicePointer res (ptr buf) 0)]
-    (with-check err (->CULinearMemory res (size buf)))))
-
 (defn mem-alloc-host
   "Allocates `size` bytes of page-locked, 'pinned' on the host.
 
@@ -236,102 +269,115 @@
   "
   [^long size]
   (let [pp (Pointer.)
+        cu (CUdeviceptr.)
         err (JCudaDriver/cuMemAllocHost pp size)]
-    (with-check err (.order (.getByteBuffer pp 0 size) (ByteOrder/nativeOrder)))))
+    (with-check err
+      (let [err (JCudaDriver/cuMemHostGetDevicePointer cu pp 0)]
+        (with-check err
+          (->CUPinnedMemory cu pp (.order (.getByteBuffer pp 0 size) (ByteOrder/nativeOrder)) size))))))
 
-;; ================== Memcpy variants ==============================================
-
-(defn memcpy!
-  ([src dst ^long byte-count]
-   (with-check
-     (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) byte-count)
-     dst))
-  ([src dst]
-   (memcpy! src dst (min (long (size src)) (long (size dst))))))
-
-(defn memcpy-host!
-  ([src dst ^long byte-count]
-   ((memcpy-host* src) src dst byte-count))
-  ([src dst]
-   (memcpy-host! src dst (min (long (size src)) (long (size dst))))))
-
-(defn memcpy-host-async!
-  ([src dst ^long byte-count hstream]
-   ((memcpy-host* src) src dst byte-count hstream))
-  ([src dst hstream]
-   (memcpy-host-async! src dst (min (long (size src)) (long (size dst))) hstream)))
-
-(defn ^:private memcpy-from-host [host dst byte-size]
-  (memcpy-from-host* dst host byte-size))
+;; =============== Host memory  =================================
 
 (extend-type (Class/forName "[F")
-  Mem
+  HostMem
   (ptr [this]
     (Pointer/to ^floats this))
+  Mem
   (size [this]
     (* Float/BYTES (alength ^floats this)))
-  (memcpy-host* [this]
-    memcpy-from-host))
+  (memcpy-host*
+    ([this cu byte-size]
+     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
+    ([this cu byte-size hstream]
+     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
 
 (extend-type (Class/forName "[D")
-  Mem
+  HostMem
   (ptr [this]
     (Pointer/to ^doubles this))
+  Mem
   (size [this]
     (* Double/BYTES (alength ^doubles this)))
-  (memcpy-host* [this]
-    memcpy-from-host))
+  (memcpy-host*
+    ([this cu byte-size]
+     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
+    ([this cu byte-size hstream]
+     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
 
 (extend-type (Class/forName "[I")
-  Mem
+  HostMem
   (ptr [this]
     (Pointer/to ^ints this))
+  Mem
   (size [this]
     (* Integer/BYTES (alength ^ints this)))
-  (memcpy-host* [this]
-    memcpy-from-host))
+  (memcpy-host*
+    ([this cu byte-size]
+     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
+    ([this cu byte-size hstream]
+     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
 
 (extend-type (Class/forName "[J")
-  Mem
+  HostMem
   (ptr [this]
     (Pointer/to ^longs this))
+  Mem
   (size [this]
     (* Long/BYTES (alength ^longs this)))
-  (memcpy-host* [this]
-    memcpy-from-host))
+  (memcpy-host*
+    ([this cu byte-size]
+     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
+    ([this cu byte-size hstream]
+     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
 
 (extend-type (Class/forName "[B")
-  Mem
+  HostMem
   (ptr [this]
     (Pointer/to ^bytes this))
+  Mem
   (size [this]
     (alength ^bytes this))
-  (memcpy-host* [this]
-    memcpy-from-host))
+  (memcpy-host*
+    ([this cu byte-size]
+     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
+    ([this cu byte-size hstream]
+     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
 
 (extend-type (Class/forName "[S")
-  Mem
+  HostMem
   (ptr [this]
     (Pointer/to ^shorts this))
+  Mem
   (size [this]
     (* Short/BYTES (alength ^shorts this)))
-  (memcpy-host* [this]
-    memcpy-from-host))
+  (memcpy-host*
+    ([this cu byte-size]
+     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
+    ([this cu byte-size hstream]
+     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
 
 (extend-type (Class/forName "[C")
-  Mem
+  HostMem
   (ptr [this]
     (Pointer/to ^chars this))
+  Mem
   (size [this]
     (* Character/BYTES (alength ^chars this)))
-  (memcpy-host* [this]
-    memcpy-from-host))
+  (memcpy-host*
+    ([this cu byte-size]
+     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
+    ([this cu byte-size hstream]
+     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
 
 (extend-type ByteBuffer
-  Mem
+  HostMem
   (ptr [this]
     (Pointer/toBuffer this))
+  Mem
   (size [this]
     (.capacity ^ByteBuffer this))
-  (memcpy-host* [this]
-    memcpy-from-host))
+  (memcpy-host*
+    ([this cu byte-size]
+     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
+    ([this cu byte-size hstream]
+     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
