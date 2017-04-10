@@ -22,7 +22,7 @@
             [clojure.string :as str]
             [clojure.core.async :refer [go >!]])
   (:import jcuda.Pointer
-           [jcuda.driver JCudaDriver CUdevice CUcontext CUdeviceptr]
+           [jcuda.driver JCudaDriver CUdevice CUcontext CUdeviceptr CUmemAttach_flags]
            [java.nio ByteBuffer ByteOrder]))
 
 (def ^{:dynamic true
@@ -75,12 +75,16 @@
 
 (defn context
   "Creates a CUDA context on the `device` using a keyword `flag`.
-  For available flags, see [[constants/ctx-flags]]. Must be released after use.
+
+  Valid flags are: `:sched-aulto`, `:sched-spin`, `:sched-yield`, `:sched-blocking-sync`,
+  `:map-host`, `:lmem-resize-to-max`. The default is none.
+  Must be released after use.
 
   Also see [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html#group__CUDA__CTX_1g65dc0012348bc84810e2103a40d8e2cf).
   "
   ([dev flag]
-   (context* dev (or (ctx-flags flag) (throw (ex-info "Unknown context flag." {:flag flag})))))
+   (context* dev (or (ctx-flags flag)
+                     (throw (ex-info "Unknown context flag." {:flag flag :available ctx-flags})))))
   ([dev]
    (context* dev 0)))
 
@@ -152,6 +156,37 @@
         err (JCudaDriver/cuMemAlloc res size)]
     (with-check err (->CULinearMemory res size))))
 
+(defn mem-alloc-managed*
+  "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
+  system, specified by an integer `flag`.
+
+  Returns a [[CULinearmemory]] object.
+  The memory is not cleared. `size` must be greater than `0`.
+
+  See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb347ded34dc326af404aa02af5388a32).
+  "
+  ([^long size ^long flag]
+   (let [res (CUdeviceptr.)
+         err (JCudaDriver/cuMemAllocManaged res size flag)]
+     (with-check err (->CULinearMemory res size)))))
+
+(defn mem-alloc-managed
+  "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
+  system, specified by a keyword `flag`.
+
+  Returns a [[CULinearmemory]] object.
+  Valid flags are: `:global`, `:host` and `:single` (the default).
+  The memory is not cleared. `size` must be greater than `0`.
+
+  See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb347ded34dc326af404aa02af5388a32).
+  "
+  ([^long size flag]
+   (mem-alloc-managed* size (or (mem-attach-flags flag)
+                                (throw (ex-info "Unknown mem-attach flag."
+                                                {:flag flag :available mem-attach-flags})))))
+  (^ByteBuffer [^long size]
+   (mem-alloc-managed* size CUmemAttach_flags/CU_MEM_ATTACH_GLOBAL)))
+
 ;; =================== Pinned Memory ================================================
 
 (defn mem-host-alloc*
@@ -171,6 +206,7 @@
   "Allocates `size` bytes of page-locked, 'pinned' on the host, using keyword `flags`.
   For available flags, see [constants/mem-host-alloc-flags]
 
+  Valid flags are: `:portable`, `:devicemap` and `:writecombined`. The default is none.
   The memory is not cleared. `size` must be greater than `0`.
 
   See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1g572ca4011bfcb25034888a14d4e035b9).
@@ -178,7 +214,8 @@
   ([^long size flags]
    (mem-host-alloc* size (if (keyword? flags)
                            (or (mem-host-alloc-flags flags)
-                               (throw (ex-info "Unknown mem-host-alloc flag." {:flag flags})))
+                               (throw (ex-info "Unknown mem-host-alloc flag."
+                                               {:flag flags :available mem-host-alloc-flags})))
                            (mask mem-host-alloc-flags flags))))
   (^ByteBuffer [^long size]
    (mem-host-alloc* size 0)))

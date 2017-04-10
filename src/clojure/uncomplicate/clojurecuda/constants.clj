@@ -9,7 +9,8 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.constants
   "Defines constants and mappings from/to CUDA constants."
-  (:import [jcuda.driver CUresult CUctx_flags JCudaDriver CUdevice_attribute CUcomputemode]))
+  (:import [jcuda.driver CUresult CUctx_flags JCudaDriver CUdevice_attribute CUcomputemode
+            CUmemAttach_flags]))
 
 ;; ============= Error Codes ===================================================
 
@@ -37,29 +38,11 @@ See [cuCtxMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA_
    :devicemap JCudaDriver/CU_MEMHOSTALLOC_DEVICEMAP
    :writecombined JCudaDriver/CU_MEMHOSTALLOC_WRITECOMBINED})
 
-
-(def device-attributes-special
-  {:compute-mode CUdevice_attribute/CU_DEVICE_ATTRIBUTE_COMPUTE_MODE})
-
-(def device-attributes-bool
-  {:async-engine-count CUdevice_attribute/CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT
-   :can-map-host-memory CUdevice_attribute/CU_DEVICE_ATTRIBUTE_CAN_MAP_HOST_MEMORY
-   :clock-rate CUdevice_attribute/CU_DEVICE_ATTRIBUTE_CLOCK_RATE
-   :compute-capability-major CUdevice_attribute/CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR
-   :compute-capability-minor CUdevice_attribute/CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR
-   :compute-mode CUdevice_attribute/CU_DEVICE_ATTRIBUTE_COMPUTE_MODE
-   :concxrrent-kernels CUdevice_attribute/CU_DEVICE_ATTRIBUTE_CONCURRENT_KERNELS
-   :ecc-enabled CUdevice_attribute/CU_DEVICE_ATTRIBUTE_ECC_ENABLED
-   :global-L1-cache-supported CUdevice_attribute/CU_DEVICE_ATTRIBUTE_GLOBAL_L1_CACHE_SUPPORTED
-   :global-memory-bus-widht CUdevice_attribute/CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH
-   :integrated CUdevice_attribute/CU_DEVICE_ATTRIBUTE_INTEGRATED
-   :kernel-exec-timeout CUdevice_attribute/CU_DEVICE_ATTRIBUTE_KERNEL_EXEC_TIMEOUT
-   :L2-cache-size CUdevice_attribute/CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE
-   :local-L1-cache-supported CUdevice_attribute/CU_DEVICE_ATTRIBUTE_LOCAL_L1_CACHE_SUPPORTED
-   :managed-memory CUdevice_attribute/CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY
-
-
-   })
+(def ^{:doc "Available flags for the [[core/mem-host-attach]] function.
+See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb347ded34dc326af404aa02af5388a32)."}
+  mem-attach-flags
+  {:global CUmemAttach_flags/CU_MEM_ATTACH_GLOBAL
+   :host CUmemAttach_flags/CU_MEM_ATTACH_HOST})
 
 (defn dec-compute-mode [^long mode]
   (case mode

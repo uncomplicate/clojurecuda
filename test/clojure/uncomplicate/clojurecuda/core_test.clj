@@ -75,4 +75,21 @@
        (.putFloat ^ByteBuffer mapped-host 0 14) => mapped-host
        (memcpy-host! cuda host) => host
        (aget ^floats host 0) => 14.0)))
+
+  (facts
+   "mem-alloc-managed tests."
+   (with-release [host0 (float-array [15])
+                  host1 (float-array 1)
+                  cuda0 (mem-alloc-managed Float/BYTES :host)
+                  cuda1 (mem-alloc-managed Float/BYTES :global)]
+
+     (size cuda0) => Float/BYTES
+     (mem-alloc-managed Float/BYTES :unknown) => (throws ExceptionInfo)
+     (memcpy-host! host0 cuda0) => cuda0
+     (memcpy! cuda0 cuda1) => cuda1
+     (memcpy-host! cuda1 host1) => host1
+     (aget ^floats host1 0) => 15.0))
+
+
+
   )
