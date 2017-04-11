@@ -205,10 +205,16 @@
 
 ;; =================== Pinned Memory ================================================
 
-(deftype CUPinnedMemory [^CUdeviceptr cu ^Pointer p ^ByteBuffer buf ^long s]
+(defn ^:private free-pinned [p buf]
+  (with-check (JCudaDriver/cuMemFreeHost p) (release buf)))
+
+(defn ^:private unregister-pinned [p _]
+  (with-check (JCudaDriver/cuMemHostUnregister p) true))
+
+(deftype CUPinnedMemory [^CUdeviceptr cu ^Pointer p ^ByteBuffer buf ^long s release-fn]
   Releaseable
   (release [_]
-    (with-check (JCudaDriver/cuMemFreeHost p) (release buf)))
+    (release-fn p buf))
   HostMem
   (ptr [_]
     p)
@@ -234,13 +240,14 @@
   See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1g572ca4011bfcb25034888a14d4e035b9).
   "
   [^long size ^long flags]
-  (let [pp (Pointer.)
-        cu (CUdeviceptr.)
-        err (JCudaDriver/cuMemHostAlloc pp size flags)]
+  (let [p (Pointer.)
+        err (JCudaDriver/cuMemHostAlloc p size flags)]
     (with-check err
-      (let [err (JCudaDriver/cuMemHostGetDevicePointer cu pp 0)]
+      (let [cu (CUdeviceptr.)
+            err (JCudaDriver/cuMemHostGetDevicePointer cu p 0)]
         (with-check err
-          (->CUPinnedMemory cu pp (.order (.getByteBuffer pp 0 size) (ByteOrder/nativeOrder)) size))))))
+          (->CUPinnedMemory cu p (.order (.getByteBuffer p 0 size) (ByteOrder/nativeOrder))
+                            size free-pinned))))))
 
 (defn mem-host-alloc
   "Allocates `size` bytes of page-locked, 'pinned' on the host, using keyword `flags`.
@@ -257,7 +264,7 @@
                                (throw (ex-info "Unknown mem-host-alloc flag."
                                                {:flag flags :available mem-host-alloc-flags})))
                            (mask mem-host-alloc-flags flags))))
-  (^ByteBuffer [^long size]
+  ([^long size]
    (mem-host-alloc* size 0)))
 
 (defn mem-alloc-host
@@ -268,13 +275,47 @@
   See [cuMemAllocHost](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gdd8311286d2c2691605362c689bc64e0).
   "
   [^long size]
-  (let [pp (Pointer.)
-        cu (CUdeviceptr.)
-        err (JCudaDriver/cuMemAllocHost pp size)]
+  (let [p (Pointer.)
+        err (JCudaDriver/cuMemAllocHost p size)]
     (with-check err
-      (let [err (JCudaDriver/cuMemHostGetDevicePointer cu pp 0)]
+      (let [cu (CUdeviceptr.)
+            err (JCudaDriver/cuMemHostGetDevicePointer cu p 0)]
         (with-check err
-          (->CUPinnedMemory cu pp (.order (.getByteBuffer pp 0 size) (ByteOrder/nativeOrder)) size))))))
+          (->CUPinnedMemory cu p (.order (.getByteBuffer p 0 size) (ByteOrder/nativeOrder))
+                            size free-pinned))))))
+
+(defn mem-host-register*
+  "Registers previously allocated Java `memory` structure and pins it, using raw integer `flags`.
+
+   See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gf0a9fe11544326dabd743b7aa6b54223).
+  "
+  [memory ^long flags]
+  (let [p ^Pointer (ptr memory)
+        byte-size (size memory)
+        err (JCudaDriver/cuMemHostRegister p byte-size flags)]
+    (with-check err
+      (let [cu (CUdeviceptr.)
+            err (JCudaDriver/cuMemHostGetDevicePointer cu p 0)]
+        (with-check err
+          (->CUPinnedMemory cu p (.order (.getByteBuffer p 0 byte-size) (ByteOrder/nativeOrder))
+                            byte-size unregister-pinned))))))
+
+(defn mem-host-register
+  "Registers previously allocated Java `memory` structure and pins it, using keyword `flags`.
+
+  Valid flags are: `:portable`, and `:devicemap`. The default is none.
+  The memory is not cleared.
+
+  See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gf0a9fe11544326dabd743b7aa6b54223).
+  "
+  ([memory flags]
+   (mem-host-register* memory (if (keyword? flags)
+                                (or (mem-host-register-flags flags)
+                                    (throw (ex-info "Unknown mem-host-register flag."
+                                                    {:flag flags :available mem-host-register-flags})))
+                                (mask mem-host-register-flags flags))))
+  ([memory]
+   (mem-host-register* memory 0)))
 
 ;; =============== Host memory  =================================
 

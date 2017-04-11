@@ -88,6 +88,16 @@
      (memcpy-host! cuda1 host1) => host1
      (aget ^floats host1 0) => 15.0))
 
+  (facts
+   "mem-alloc-managed tests."
+   (with-release [host0 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))
+                  host1 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))
+                  cuda0 (mem-host-register host0)
+                  cuda1 (mem-host-register host1)]
 
+     (size cuda0) => Float/BYTES
+     (.putFloat host0 0 44.0)
+     (memcpy! cuda0 cuda1) => cuda1
+     (.getFloat host1 0) => 44.0))
 
   )

@@ -38,6 +38,12 @@ See [cuCtxMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA_
    :devicemap JCudaDriver/CU_MEMHOSTALLOC_DEVICEMAP
    :writecombined JCudaDriver/CU_MEMHOSTALLOC_WRITECOMBINED})
 
+(def ^{:doc "Available flags for the [[core/mem-host-register]] function.
+See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gf0a9fe11544326dabd743b7aa6b54223)."}
+  mem-host-register-flags
+  {:portable JCudaDriver/CU_MEMHOSTREGISTER_PORTABLE
+   :devicemap JCudaDriver/CU_MEMHOSTREGISTER_DEVICEMAP})
+
 (def ^{:doc "Available flags for the [[core/mem-host-attach]] function.
 See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb347ded34dc326af404aa02af5388a32)."}
   mem-attach-flags
