@@ -470,7 +470,7 @@
 
 ;; ====================== Nvrtc program JIT ========================================
 
-(defn create-program*
+(defn program*
   "TODO"
   [name source-code source-headers include-names]
   (let [res (nvrtcProgram.)]
@@ -478,15 +478,15 @@
       (JNvrtc/nvrtcCreateProgram res source-code name (count source-headers) source-headers include-names)
       res)))
 
-(defn create-program
+(defn program
   "TODO"
   ([name source-code headers]
-   (create-program* name source-code (into-array String (take-nth 2 (next headers)))
+   (program* name source-code (into-array String (take-nth 2 (next headers)))
                     (into-array String (take-nth 2 headers))))
   ([name source-code]
-   (create-program* name source-code nil nil))
+   (program* name source-code nil nil))
   ([source-code]
-   (create-program* nil source-code nil nil)))
+   (program* nil source-code nil nil)))
 
 (defn program-log
   "TODO"
@@ -494,7 +494,7 @@
   (let [res (make-array String 1)]
     (with-check-nvrtc (JNvrtc/nvrtcGetProgramLog program res) (aget ^objects res 0))))
 
-(defn compile-program*
+(defn compile*
   "TODO"
   ([^nvrtcProgram program options]
    (let [err (JNvrtc/nvrtcCompileProgram program (count options) options)]
@@ -502,12 +502,12 @@
        program
        (throw (nvrtc-error err (program-log program)))))))
 
-(defn compile-program!
+(defn compile!
   "TODO"
   ([^nvrtcProgram program options]
-   (compile-program* program (into-array String options)))
+   (compile* program (into-array String options)))
   ([^nvrtcProgram program]
-   (compile-program* program nil)))
+   (compile* program nil)))
 
 (defn ptx
   "TODO"

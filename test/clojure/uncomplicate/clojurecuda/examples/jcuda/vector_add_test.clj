@@ -8,23 +8,19 @@
 
 (ns uncomplicate.clojurecuda.examples.jcuda.vector-add-test
   (:require [midje.sweet :refer :all]
-            [uncomplicate.commons.core :refer [release with-release wrap-int]]
+            [uncomplicate.commons.core :refer [release with-release]]
             [uncomplicate.clojurecuda.core :refer :all])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 
-(extend-type (Class/forName "[Ljcuda.driver.CUdeviceptr;")
-  Mem
-  (ptr [this]
-    (jcuda.Pointer/to ^"[Ljcuda.driver.CUdeviceptr;"this)))
-
 (init)
+
 (let [program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cuda")
       block-size-x 256]
   (with-context (context (device))
-    (with-release [program (compile-program! (create-program program-source))
-                   m (module program)
-                   func (function m "add")
+    (with-release [prog (compile! (program program-source))
+                   m (module prog)
+                   add (function m "add")
                    host-a (float-array [1 2 3])
                    host-b (float-array [2 3 4])
                    host-sum (float-array 3)
@@ -35,6 +31,6 @@
        "Vector add JCuda example."
        (memcpy-host! host-a gpu-a)
        (memcpy-host! host-b gpu-b)
-       (launch! func (count host-sum) block-size-x (parameters (count host-sum) gpu-a gpu-b gpu-sum)) => func
+       (launch! add (count host-sum) block-size-x (parameters (count host-sum) gpu-a gpu-b gpu-sum))
        (synchronize)
        (seq (memcpy-host! gpu-sum host-sum)) => (seq [3.0 5.0 7.0])))))
