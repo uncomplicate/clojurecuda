@@ -9,15 +9,7 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.constants
   "Defines constants and mappings from/to CUDA constants."
-  (:import [jcuda.driver CUresult CUctx_flags JCudaDriver CUdevice_attribute CUcomputemode
-            CUmemAttach_flags]))
-
-;; ============= Error Codes ===================================================
-
-(defn dec-error
-  "Decodes CUDA error code to a meaningful string."
-  [^long code]
-  (CUresult/stringFor code))
+  (:import [jcuda.driver CUctx_flags JCudaDriver CUdevice_attribute CUcomputemode CUmemAttach_flags]))
 
 ;; ==================== Keyword mapping ======================================
 

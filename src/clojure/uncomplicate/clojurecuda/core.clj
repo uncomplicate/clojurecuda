@@ -14,15 +14,17 @@
   Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
-             [core :refer [Releaseable release]]
+             [core :refer [Releaseable release wrap-float wrap-double wrap-long wrap-int]]
              [utils :refer [mask]]]
             [uncomplicate.clojurecuda
              [constants :refer :all]
-             [utils :refer [with-check with-check-arr]]]
+             [utils :refer [with-check with-check-nvrtc nvrtc-error]]]
             [clojure.string :as str]
             [clojure.core.async :refer [go >!]])
-  (:import jcuda.Pointer
-           [jcuda.driver JCudaDriver CUdevice CUcontext CUdeviceptr CUmemAttach_flags]
+  (:import [jcuda Pointer NativePointerObject]
+           [jcuda.driver JCudaDriver CUdevice CUcontext CUdeviceptr CUmemAttach_flags CUmodule
+            CUfunction]
+           [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]
            [java.nio ByteBuffer ByteOrder]))
 
 (def ^{:dynamic true
@@ -41,6 +43,16 @@
   (release [dp]
     (with-check (JCudaDriver/cuMemFree dp) true)))
 
+(extend-type nvrtcProgram
+  Releaseable
+  (release [p]
+    (with-check-nvrtc (JNvrtc/nvrtcDestroyProgram p) true)))
+
+(extend-type CUmodule
+  Releaseable
+  (release [m]
+    (with-check (JCudaDriver/cuModuleUnload m) true)))
+
 (defn init
   "Initializes the CUDA driver."
   []
@@ -51,16 +63,16 @@
 (defn device-count
   "Returns the number of CUDA devices on the system."
   ^long []
-  (let [res (int-array 1)
-        err (JCudaDriver/cuDeviceGetCount res)]
-    (with-check err (aget res 0))))
+  (let [res (int-array 1)]
+    (with-check (JCudaDriver/cuDeviceGetCount res) (aget res 0))))
 
 (defn device
   "Returns a device specified with its ordinal number `ord`."
-  [^long ord]
-  (let [res (CUdevice.)
-        err (JCudaDriver/cuDeviceGet res ord)]
-    (with-check err res)))
+  ([^long ord]
+   (let [res (CUdevice.)]
+     (with-check (JCudaDriver/cuDeviceGet res ord) res)))
+  ([]
+   (device 0)))
 
 ;; =================== Context ==================================
 
@@ -69,9 +81,8 @@
   For available flags, see [[constants/ctx-flags]].
   "
   [dev ^long flags]
-  (let [res (CUcontext.)
-        err (JCudaDriver/cuCtxCreate res flags dev)]
-    (with-check err res)))
+  (let [res (CUcontext.)]
+    (with-check (JCudaDriver/cuCtxCreate res flags dev) res)))
 
 (defn context
   "Creates a CUDA context on the `device` using a keyword `flag`.
@@ -99,27 +110,30 @@
      (try ~@body
           (finally (release *context*)))))
 
+(defn synchronize
+  "TODO"
+  []
+  (with-check (JCudaDriver/cuCtxSynchronize) true))
+
 ;; ================== Memory ===================================
 
 (defprotocol Mem
   "An object that represents memory that participates in CUDA operations.
   It can be on the device, or on the host.  Built-in implementations:
   cuda pointers, Java primitive arrays and ByteBuffers"
+  (ptr [this]
+    "`Pointer` to this object.")
   (size [this]
     "Memory size of this cuda or host object in bytes.")
   (memcpy-host* [this host size] [this host size hstream]))
 
-(defprotocol CUMem
-  "A wrapper for CUdeviceptr objects, that also holds a Pointer to the cuda memory
-  object, context that created it, and size in bytes. It is useful in many
-  functions that need that (redundant in Java) data because of the C background
-  of CUDA functions."
+(defprotocol DeviceMem
   (cu-ptr [this]
-    "The raw JCuda memory object."))
+    "CUDA `CUdeviceptr` to this object."))
 
 (defprotocol HostMem
-  (ptr [this]
-    "CUDA `Pointer` to this object.")
+  (host-ptr [this]
+    "Host `Pointer` to this object.")
   (host-buffer [this]
     "The actual `ByteBuffer` on the host"))
 
@@ -127,9 +141,7 @@
 
 (defn memcpy!
   ([src dst ^long byte-count]
-   (with-check
-     (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) byte-count)
-     dst))
+   (with-check (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) byte-count) dst))
   ([src dst]
    (memcpy! src dst (min (long (size src)) (long (size dst))))))
 
@@ -145,20 +157,27 @@
 
 ;; ==================== Linear memory ================================================
 
-(deftype CULinearMemory [^CUdeviceptr cu ^long s]
+(deftype CULinearMemory [^CUdeviceptr cu ^Pointer p ^long s]
   Releaseable
   (release [_]
     (release cu))
+  DeviceMem
+  (cu-ptr [_]
+    cu)
   Mem
+  (ptr [_]
+    p)
   (size [_]
     s)
   (memcpy-host* [this host byte-size]
-    (with-check (JCudaDriver/cuMemcpyDtoH (ptr host) cu byte-size) host))
+    (with-check (JCudaDriver/cuMemcpyDtoH (host-ptr host) cu byte-size) host))
   (memcpy-host* [this host byte-size hstream]
-    (with-check (JCudaDriver/cuMemcpyDtoHAsync (ptr host) cu byte-size hstream) host))
-  CUMem
-  (cu-ptr [_]
-    cu))
+    (with-check (JCudaDriver/cuMemcpyDtoHAsync (host-ptr host) cu byte-size hstream) host)))
+
+(defn ^:private cu-linear-memory [^CUdeviceptr cu ^long size]
+  (let [cu-arr (make-array CUdeviceptr 1)]
+    (aset ^"[Ljcuda.driver.CUdeviceptr;" cu-arr 0 cu)
+    (CULinearMemory. cu (Pointer/to ^"[Ljcuda.driver.CUdeviceptr;" cu-arr) size)))
 
 (defn mem-alloc
   "Allocates the `size` bytes of memory on the device. Returns a [[CULinearmemory]] object.
@@ -168,9 +187,8 @@
   See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb82d2a09844a58dd9e744dc31e8aa467).
   "
   [^long size]
-  (let [res (CUdeviceptr.)
-        err (JCudaDriver/cuMemAlloc res size)]
-    (with-check err (->CULinearMemory res size))))
+  (let [cu (CUdeviceptr.)]
+    (with-check (JCudaDriver/cuMemAlloc cu size) (cu-linear-memory cu size))))
 
 (defn mem-alloc-managed*
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
@@ -182,9 +200,8 @@
   See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb347ded34dc326af404aa02af5388a32).
   "
   ([^long size ^long flag]
-   (let [res (CUdeviceptr.)
-         err (JCudaDriver/cuMemAllocManaged res size flag)]
-     (with-check err (->CULinearMemory res size)))))
+   (let [cu (CUdeviceptr.)]
+     (with-check (JCudaDriver/cuMemAllocManaged cu size flag) (cu-linear-memory cu size)))))
 
 (defn mem-alloc-managed
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
@@ -205,31 +222,41 @@
 
 ;; =================== Pinned Memory ================================================
 
-(defn ^:private free-pinned [p buf]
-  (with-check (JCudaDriver/cuMemFreeHost p) (release buf)))
+(defn ^:private free-pinned [hp buf]
+  (with-check (JCudaDriver/cuMemFreeHost hp) (release buf)))
 
-(defn ^:private unregister-pinned [p _]
-  (with-check (JCudaDriver/cuMemHostUnregister p) true))
+(defn ^:private unregister-pinned [hp _]
+  (with-check (JCudaDriver/cuMemHostUnregister hp) true))
 
-(deftype CUPinnedMemory [^CUdeviceptr cu ^Pointer p ^ByteBuffer buf ^long s release-fn]
+(deftype CUPinnedMemory [^CUdeviceptr cu ^Pointer p ^Pointer hp ^ByteBuffer buf ^long s release-fn]
   Releaseable
   (release [_]
-    (release-fn p buf))
+    (release-fn hp buf))
+  DeviceMem
+  (cu-ptr [_]
+    cu)
   HostMem
-  (ptr [_]
-    p)
+  (host-ptr [_]
+    hp)
   (host-buffer [_]
     buf)
   Mem
+  (ptr [_]
+    p)
   (size [_]
     s)
   (memcpy-host* [this host byte-size]
-    (with-check (JCudaDriver/cuMemcpyDtoH (ptr host) cu byte-size) host))
+    (with-check (JCudaDriver/cuMemcpyDtoH (host-ptr host) cu byte-size) host))
   (memcpy-host* [this host byte-size hstream]
-    (with-check (JCudaDriver/cuMemcpyDtoHAsync (ptr host) cu byte-size hstream) host))
-  CUMem
-  (cu-ptr [_]
-    cu))
+    (with-check (JCudaDriver/cuMemcpyDtoHAsync (host-ptr host) cu byte-size hstream) host)))
+
+(defn ^:private cu-pinned-memory [^Pointer hp ^long size release-fn]
+  (let [cu (CUdeviceptr.)]
+    (with-check (JCudaDriver/cuMemHostGetDevicePointer cu hp 0)
+      (let [cu-arr (make-array CUdeviceptr 1)
+            buf (.order (.getByteBuffer hp 0 size) (ByteOrder/nativeOrder))]
+        (aset ^"[Ljcuda.driver.CUdeviceptr;" cu-arr 0 cu)
+        (CUPinnedMemory. cu (Pointer/to ^"[Ljcuda.driver.CUdeviceptr;" cu-arr) hp buf size release-fn)))))
 
 (defn mem-host-alloc*
   "Allocates `size` bytes of page-locked, 'pinned' on the host, using raw integer `flags`.
@@ -240,14 +267,8 @@
   See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1g572ca4011bfcb25034888a14d4e035b9).
   "
   [^long size ^long flags]
-  (let [p (Pointer.)
-        err (JCudaDriver/cuMemHostAlloc p size flags)]
-    (with-check err
-      (let [cu (CUdeviceptr.)
-            err (JCudaDriver/cuMemHostGetDevicePointer cu p 0)]
-        (with-check err
-          (->CUPinnedMemory cu p (.order (.getByteBuffer p 0 size) (ByteOrder/nativeOrder))
-                            size free-pinned))))))
+  (let [p (Pointer.)]
+    (with-check (JCudaDriver/cuMemHostAlloc p size flags) (cu-pinned-memory p size free-pinned))))
 
 (defn mem-host-alloc
   "Allocates `size` bytes of page-locked, 'pinned' on the host, using keyword `flags`.
@@ -275,14 +296,8 @@
   See [cuMemAllocHost](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gdd8311286d2c2691605362c689bc64e0).
   "
   [^long size]
-  (let [p (Pointer.)
-        err (JCudaDriver/cuMemAllocHost p size)]
-    (with-check err
-      (let [cu (CUdeviceptr.)
-            err (JCudaDriver/cuMemHostGetDevicePointer cu p 0)]
-        (with-check err
-          (->CUPinnedMemory cu p (.order (.getByteBuffer p 0 size) (ByteOrder/nativeOrder))
-                            size free-pinned))))))
+  (let [p (Pointer.)]
+    (with-check (JCudaDriver/cuMemAllocHost p size) (cu-pinned-memory p size free-pinned))))
 
 (defn mem-host-register*
   "Registers previously allocated Java `memory` structure and pins it, using raw integer `flags`.
@@ -291,14 +306,9 @@
   "
   [memory ^long flags]
   (let [p ^Pointer (ptr memory)
-        byte-size (size memory)
-        err (JCudaDriver/cuMemHostRegister p byte-size flags)]
-    (with-check err
-      (let [cu (CUdeviceptr.)
-            err (JCudaDriver/cuMemHostGetDevicePointer cu p 0)]
-        (with-check err
-          (->CUPinnedMemory cu p (.order (.getByteBuffer p 0 byte-size) (ByteOrder/nativeOrder))
-                            byte-size unregister-pinned))))))
+        byte-size (size memory)]
+    (with-check (JCudaDriver/cuMemHostRegister p byte-size flags)
+      (cu-pinned-memory p byte-size unregister-pinned))))
 
 (defn mem-host-register
   "Registers previously allocated Java `memory` structure and pins it, using keyword `flags`.
@@ -318,12 +328,33 @@
    (mem-host-register* memory 0)))
 
 ;; =============== Host memory  =================================
+(extend-type Float
+  Mem
+  (ptr [this]
+    (ptr (wrap-float this))))
+
+(extend-type Double
+  Mem
+  (ptr [this]
+    (ptr (wrap-double this))))
+
+(extend-type Integer
+  Mem
+  (ptr [this]
+    (ptr (wrap-int this))))
+
+(extend-type Long
+  Mem
+  (ptr [this]
+    (ptr (wrap-long this))))
 
 (extend-type (Class/forName "[F")
   HostMem
+  (host-ptr [this]
+    (ptr this))
+  Mem
   (ptr [this]
     (Pointer/to ^floats this))
-  Mem
   (size [this]
     (* Float/BYTES (alength ^floats this)))
   (memcpy-host*
@@ -334,9 +365,11 @@
 
 (extend-type (Class/forName "[D")
   HostMem
+  (host-ptr [this]
+    (ptr this))
+  Mem
   (ptr [this]
     (Pointer/to ^doubles this))
-  Mem
   (size [this]
     (* Double/BYTES (alength ^doubles this)))
   (memcpy-host*
@@ -347,9 +380,11 @@
 
 (extend-type (Class/forName "[I")
   HostMem
+  (host-ptr [this]
+    (ptr this))
+  Mem
   (ptr [this]
     (Pointer/to ^ints this))
-  Mem
   (size [this]
     (* Integer/BYTES (alength ^ints this)))
   (memcpy-host*
@@ -360,9 +395,11 @@
 
 (extend-type (Class/forName "[J")
   HostMem
+  (host-ptr [this]
+    (ptr this))
+  Mem
   (ptr [this]
     (Pointer/to ^longs this))
-  Mem
   (size [this]
     (* Long/BYTES (alength ^longs this)))
   (memcpy-host*
@@ -373,9 +410,11 @@
 
 (extend-type (Class/forName "[B")
   HostMem
+  (host-ptr [this]
+    (ptr this))
+  Mem
   (ptr [this]
     (Pointer/to ^bytes this))
-  Mem
   (size [this]
     (alength ^bytes this))
   (memcpy-host*
@@ -386,9 +425,11 @@
 
 (extend-type (Class/forName "[S")
   HostMem
+  (hostptr [this]
+    (ptr this))
+  Mem
   (ptr [this]
     (Pointer/to ^shorts this))
-  Mem
   (size [this]
     (* Short/BYTES (alength ^shorts this)))
   (memcpy-host*
@@ -399,9 +440,11 @@
 
 (extend-type (Class/forName "[C")
   HostMem
+  (host-ptr [this]
+    (ptr this))
+  Mem
   (ptr [this]
     (Pointer/to ^chars this))
-  Mem
   (size [this]
     (* Character/BYTES (alength ^chars this)))
   (memcpy-host*
@@ -412,9 +455,11 @@
 
 (extend-type ByteBuffer
   HostMem
+  (host-ptr [this]
+    (ptr this))
+  Mem
   (ptr [this]
     (Pointer/toBuffer this))
-  Mem
   (size [this]
     (.capacity ^ByteBuffer this))
   (memcpy-host*
@@ -422,3 +467,117 @@
      (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
     ([this cu byte-size hstream]
      (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
+
+;; ====================== Nvrtc program JIT ========================================
+
+(defn create-program*
+  "TODO"
+  [name source-code source-headers include-names]
+  (let [res (nvrtcProgram.)]
+    (with-check-nvrtc
+      (JNvrtc/nvrtcCreateProgram res source-code name (count source-headers) source-headers include-names)
+      res)))
+
+(defn create-program
+  "TODO"
+  ([name source-code headers]
+   (create-program* name source-code (into-array String (take-nth 2 (next headers)))
+                    (into-array String (take-nth 2 headers))))
+  ([name source-code]
+   (create-program* name source-code nil nil))
+  ([source-code]
+   (create-program* nil source-code nil nil)))
+
+(defn program-log
+  "TODO"
+  [^nvrtcProgram program]
+  (let [res (make-array String 1)]
+    (with-check-nvrtc (JNvrtc/nvrtcGetProgramLog program res) (aget ^objects res 0))))
+
+(defn compile-program*
+  "TODO"
+  ([^nvrtcProgram program options]
+   (let [err (JNvrtc/nvrtcCompileProgram program (count options) options)]
+     (if (= nvrtcResult/NVRTC_SUCCESS err)
+       program
+       (throw (nvrtc-error err (program-log program)))))))
+
+(defn compile-program!
+  "TODO"
+  ([^nvrtcProgram program options]
+   (compile-program* program (into-array String options)))
+  ([^nvrtcProgram program]
+   (compile-program* program nil)))
+
+(defn ptx
+  "TODO"
+  [^nvrtcProgram program]
+  (let [res (make-array String 1)]
+    (with-check-nvrtc (JNvrtc/nvrtcGetPTX program res) (aget ^objects res 0))))
+
+;; ========================= Module ==============================================
+
+(defn load-data!
+  "TODO"
+  [^CUmodule m data]
+  (with-check (JCudaDriver/cuModuleLoadData m (str (if (instance? nvrtcProgram data) (ptx data) data))) m))
+
+(defn module
+  "TODO"
+  ([]
+   (CUmodule.))
+  ([data]
+   (load-data! (CUmodule.) data)))
+
+;; ========================= Function ===========================================
+
+(defrecord WorkSize [^long grid-x ^long grid-y ^long grid-z ^long block-x ^long block-y ^long block-z])
+
+(defn work-size-1d
+  "TODO"
+  ([^long grid-x]
+   (WorkSize. grid-x 1 1 256 1 1))
+  ([^long grid-x ^long block-x]
+   (WorkSize. grid-x 1 1 block-x 1 1)))
+
+(defn work-size-2d
+  "TODO"
+  ([^long grid-x ^long grid-y]
+   (WorkSize. grid-x grid-y 1 256 1 1))
+  ([^long grid-x ^long grid-y ^long block-x]
+   (WorkSize. grid-x grid-y 1 block-x 1 1))
+  ([^long grid-x ^long grid-y ^long block-x ^long block-y]
+   (WorkSize. grid-x grid-y 1 block-x block-y 1)))
+
+(defn work-size-3d
+  "TODO"
+  ([^long grid-x ^long grid-y ^long grid-z]
+   (WorkSize. grid-x grid-y grid-z 256 1 1))
+  ([^long grid-x ^long grid-y ^long grid-z ^long block-x]
+   (WorkSize. grid-x grid-y grid-z block-x 1 1))
+  ([grid-x grid-y grid-z block-x block-y block-z]
+   (WorkSize. grid-x grid-y grid-z block-x block-y block-z)))
+
+(defn function
+  "TODO"
+  [^CUmodule m name]
+  (let [res (CUfunction.)]
+    (with-check (JCudaDriver/cuModuleGetFunction res m name) res)))
+
+(defn parameters
+  "TODO"
+  [& params]
+  (Pointer/to ^"[Ljcuda.Pointer;" (into-array Pointer (map ptr params))))
+
+(defn launch!
+  "TODO"
+  ([^CUfunction fun ^long grid-size-x ^long block-size-x ^Pointer params]
+   (with-check
+     (JCudaDriver/cuLaunchKernel fun grid-size-x 1 1 block-size-x 1 1 0 nil params nil)
+     fun))
+  ([^CUfunction fun ^WorkSize work-size ^Pointer params]
+   (with-check
+     (JCudaDriver/cuLaunchKernel fun (.grid-x work-size) (.grid-y work-size) (.grid-z work-size)
+                                 (.block-x work-size) (.block-y work-size) (.block-z work-size)
+                                 0 nil params nil)
+     fun)))

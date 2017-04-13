@@ -47,6 +47,11 @@
 (defn device-name [^CUdevice device]
   (info-string* JCudaDriver/cuDeviceGetName device))
 
+(defn total-mem [^CUdevice device]
+  (let [res (long-array 1)
+        err (JCudaDriver/cuDeviceTotalMem res device)]
+    (with-check err (aget res 0))))
+
 (defn async-engine-count ^long [^CUdevice device]
   (info-attribute* JCudaDriver/cuDeviceGetAttribute device
                    CUdevice_attribute/CU_DEVICE_ATTRIBUTE_ASYNC_ENGINE_COUNT))
@@ -369,6 +374,7 @@
 
 (def device-attributes
   {:name device-name
+   :total-mem total-mem
    :async-engine-count async-engine-count
    :can-map-host-memory can-map-host-memory
    :clock-rate clock-rate

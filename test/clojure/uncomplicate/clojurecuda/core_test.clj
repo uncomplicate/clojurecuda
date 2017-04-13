@@ -89,7 +89,7 @@
      (aget ^floats host1 0) => 15.0))
 
   (facts
-   "mem-alloc-managed tests."
+   "mem-alloc-registered tests."
    (with-release [host0 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))
                   host1 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))
                   cuda0 (mem-host-register host0)

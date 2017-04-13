@@ -11,10 +11,13 @@
   "Utility functions used as helpers in other ClojureCUDA namespaces.
   The user of the ClojureCUDA library would probably not need to use
   any of the functions defined here."
-  (:require [uncomplicate.commons.utils :as cu]
-            [uncomplicate.clojurecuda.constants :refer [dec-error]])
+  (:require [uncomplicate.commons.utils :as cu])
   (:import clojure.lang.ExceptionInfo
-           [java.nio ByteBuffer DirectByteBuffer]))
+           [java.nio ByteBuffer DirectByteBuffer]
+           jcuda.driver.CUresult
+           jcuda.nvrtc.nvrtcResult))
+
+;; ============= Error Codes ===================================================
 
 (defn error
   "Converts an CUDA error code to an [ExceptionInfo]
@@ -25,7 +28,6 @@
   CUDA standard, and an optional `details` argument that could be
   anything that you think is informative.
 
-  See the available codes in the source of [[constants/dec-error]].
   Also see the discussion about
 
   Examples:
@@ -34,9 +36,18 @@
       (error -5 {:comment \"Why here?\"\"}) => an ExceptionInfo instance
   "
   ([^long err-code details]
-   (let [err (dec-error err-code)]
+   (let [err (CUresult/stringFor err-code)]
      (ex-info (format "CUDA error: %s." err)
               {:name err :code err-code :type :cuda-error :details details})))
+  ([err-code]
+   (error err-code nil)))
+
+(defn nvrtc-error
+  "Converts an CUDA Nvrtc error code to an ExceptionInfo with richer, user-friendly information. "
+  ([^long err-code details]
+   (let [err (nvrtcResult/stringFor err-code)]
+     (ex-info (format "NVRTC error: %s." err)
+              {:name err :code err-code :type :nvrtc-error :details details})))
   ([err-code]
    (error err-code nil)))
 
@@ -52,6 +63,15 @@
   "
   ([err-code form]
    `(cu/with-check error ~err-code ~form)))
+
+(defmacro with-check-nvrtc
+  "Evaluates `form` if `err-code` is not zero (`NVRTC_SUCCESS`), otherwise throws
+  an appropriate `ExceptionInfo` with decoded informative details.
+  It helps fith JCuda nvrtc methods that return error codes directly, while
+  returning computation results through side-effects in arguments.
+  "
+  ([err-code form]
+   `(cu/with-check nvrtc-error ~err-code ~form)))
 
 (defmacro with-check-arr
   "Evaluates `form` if the integer in the `err-code` primitive int array is `0`,
