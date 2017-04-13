@@ -17,4 +17,4 @@
 
 (facts
  "info tests."
- (count (info (device 0))) => 81)
+ (count (info (device 0))) => 82)
