@@ -571,13 +571,13 @@
 
 (defn launch!
   "TODO"
-  ([^CUfunction fun ^long grid-size-x ^long block-size-x ^Pointer params]
-   (with-check
-     (JCudaDriver/cuLaunchKernel fun grid-size-x 1 1 block-size-x 1 1 0 nil params nil)
-     fun))
-  ([^CUfunction fun ^WorkSize work-size ^Pointer params]
+  ([^CUfunction fun ^WorkSize work-size shared-mem-bytes hstream ^Pointer params]
    (with-check
      (JCudaDriver/cuLaunchKernel fun (.grid-x work-size) (.grid-y work-size) (.grid-z work-size)
                                  (.block-x work-size) (.block-y work-size) (.block-z work-size)
-                                 0 nil params nil)
-     fun)))
+                                 shared-mem-bytes hstream params nil)
+     fun))
+  ([^CUfunction fun ^WorkSize work-size hstream ^Pointer params]
+   (launch! fun work-size 0 hstream params))
+  ([^CUfunction fun ^WorkSize work-size ^Pointer params]
+   (launch! fun work-size 0 nil params)))

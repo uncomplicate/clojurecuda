@@ -15,8 +15,7 @@
 
 (init)
 
-(let [program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cuda")
-      block-size-x 256]
+(let [program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cuda")]
   (with-context (context (device))
     (with-release [prog (compile! (program program-source))
                    m (module prog)
@@ -31,6 +30,6 @@
        "Vector add JCuda example."
        (memcpy-host! host-a gpu-a)
        (memcpy-host! host-b gpu-b)
-       (launch! add (count host-sum) block-size-x (parameters (count host-sum) gpu-a gpu-b gpu-sum))
+       (launch! add (work-size-1d (count host-sum)) (parameters (count host-sum) gpu-a gpu-b gpu-sum))
        (synchronize)
        (seq (memcpy-host! gpu-sum host-sum)) => (seq [3.0 5.0 7.0])))))
