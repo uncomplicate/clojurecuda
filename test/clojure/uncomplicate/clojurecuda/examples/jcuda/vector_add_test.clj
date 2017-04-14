@@ -9,7 +9,9 @@
 (ns uncomplicate.clojurecuda.examples.jcuda.vector-add-test
   (:require [midje.sweet :refer :all]
             [uncomplicate.commons.core :refer [release with-release]]
-            [uncomplicate.clojurecuda.core :refer :all])
+            [uncomplicate.clojurecuda
+             [core :refer :all]
+             [nvrtc :refer :all]])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 
@@ -31,5 +33,5 @@
        (memcpy-host! host-a gpu-a)
        (memcpy-host! host-b gpu-b)
        (launch! add (work-size-1d (count host-sum)) (parameters (count host-sum) gpu-a gpu-b gpu-sum))
-       (synchronize)
+       (synchronize!)
        (seq (memcpy-host! gpu-sum host-sum)) => (seq [3.0 5.0 7.0])))))

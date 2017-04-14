@@ -11,12 +11,12 @@
   "Info functions for all CUDA objects (devices, etc...).
   "
   (:require [clojure.string :as str]
-            [uncomplicate.fluokitten.core :refer [fmap]]
+            [uncomplicate.fluokitten.core :refer [fmap op]]
             [uncomplicate.clojurecuda
              [constants :refer :all]
              [utils :refer [with-check maybe]]])
   (:import jcuda.Pointer
-           [jcuda.driver JCudaDriver CUdevice CUdevice_attribute]))
+           [jcuda.driver JCudaDriver CUdevice CUdevice_attribute CUcontext CUlimit]))
 
 ;; =================== Info* utility macros ===============================
 
@@ -42,15 +42,20 @@
 (defprotocol Info
   (info [this info-type] [this]))
 
+;; =================== Version Management =================================
+
+(defn driver-version ^long []
+  (let [res (int-array 1)]
+    (with-check (JCudaDriver/cuDriverGetVersion res) (aget res 0))))
+
 ;; =================== Device info  =======================================
 
 (defn device-name [^CUdevice device]
   (info-string* JCudaDriver/cuDeviceGetName device))
 
 (defn total-mem [^CUdevice device]
-  (let [res (long-array 1)
-        err (JCudaDriver/cuDeviceTotalMem res device)]
-    (with-check err (aget res 0))))
+  (let [res (long-array 1)]
+    (with-check (JCudaDriver/cuDeviceTotalMem res device) (aget res 0))))
 
 (defn async-engine-count ^long [^CUdevice device]
   (info-attribute* JCudaDriver/cuDeviceGetAttribute device
@@ -73,8 +78,8 @@
                    CUdevice_attribute/CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR))
 
 (defn compute-mode [^CUdevice device]
-  (dec-compute-mode (info-attribute* JCudaDriver/cuDeviceGetAttribute device
-                                     CUdevice_attribute/CU_DEVICE_ATTRIBUTE_COMPUTE_MODE)))
+  (info-attribute* JCudaDriver/cuDeviceGetAttribute device
+                   CUdevice_attribute/CU_DEVICE_ATTRIBUTE_COMPUTE_MODE))
 
 (defn concurrent-kernels ^long [^CUdevice device]
   (info-attribute* JCudaDriver/cuDeviceGetAttribute device
@@ -380,7 +385,7 @@
    :clock-rate clock-rate
    :compute-capability-major compute-capability-major
    :compute-capability-minor compute-capability-minor
-   :compute-mode compute-mode
+   :compute-mode (comp dec-compute-mode compute-mode)
    :concurrent-kernels concurrent-kernels
    :ecc-enabled ecc-enabled
    :global-L1-cache-supported global-L1-cache-supported
@@ -465,3 +470,137 @@
        (throw (ex-info "Unknown attribute." {:attribute attribute}))))
     ([d]
      (fmap #(maybe (% d)) device-attributes))))
+
+;; =======================  Context Info ==================================
+
+(defn api-version
+  "Gets the context's API version."
+  ([ctx]
+   (let [res (int-array 1)]
+     (with-check (JCudaDriver/cuCtxGetApiVersion ctx res) (aget res 0))))
+  ([]
+   (let [ctx (CUcontext.)]
+     (api-version (with-check (JCudaDriver/cuCtxGetCurrent ctx) ctx)))))
+
+(defn cache-config
+  "Returns the preferred cache configuration for the current context.
+
+  See [cuCtxGetCacheConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  []
+  (let [res (int-array 1)]
+    (dec-func-cache (with-check (JCudaDriver/cuCtxGetCacheConfig res) (aget res 0)))))
+
+(defn limit*
+  "Returns or sets resource limits for the attribute specified by integer `limit`.
+
+  See [cuCtxGetLimit](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  (^long [limit]
+   (let [res (long-array 1)]
+     (with-check (JCudaDriver/cuCtxGetLimit res limit) (aget res 0))))
+  (^long [limit ^long value]
+   (with-check (JCudaDriver/cuCtxSetLimit limit value) value)))
+
+(defn limit
+  "Returns resource limits for the attribute specified by keyword `limit`.
+
+  Supported limits are: `stack-size`, `malloc-heap-size`, `printf-fifo-size`, `dev-runtime-sync-depth`,
+  `dev-runtime-pending-launch-count`.
+
+  See [cuCtxGetLimit](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  ^long [limit]
+  (limit* (or (ctx-limits limit) (throw (ex-info "Unknown limit." {:limit limit :available ctx-limits})))))
+
+(defn limit!
+  "Sets resource limit for the attribute specified by keyword `limit` to `value`.
+
+  Supported limits are: `stack-size`, `malloc-heap-size`, `printf-fifo-size`, `dev-runtime-sync-depth`,
+  `dev-runtime-pending-launch-count`.
+
+  See [cuCtxGetLimit](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  ^long [limit ^long value]
+  (limit* (or (ctx-limits limit) (throw (ex-info "Unknown limit." {:limit limit :available ctx-limits})))
+          value))
+
+(defn ctx-device
+  "Returns the device ID for the current context."
+  []
+  (let [res (CUdevice.)]
+    (with-check (JCudaDriver/cuCtxGetDevice res) res)))
+
+(defn shared-config*
+  "Sets or gets the current shared memory configuration for the current context.
+
+  See [cuCtxGetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  See [cuCtxSetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  (^long []
+   (let [res (int-array 1)]
+     (with-check (JCudaDriver/cuCtxGetSharedMemConfig res) (aget res 0))))
+  (^long [^long config]
+   (with-check (JCudaDriver/cuCtxSetSharedMemConfig config) config)))
+
+(defn shared-config
+  "Gets the current shared memory configuration for the current context.
+
+  See [cuCtxGetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)"
+  []
+  (dec-shared-config (shared-config*)))
+
+(defn shared-config!
+  "Sets the current shared memory configuration for the current context.
+
+  See [cuCtxSetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)"
+  [config]
+  (shared-config* (or (ctx-shared-config config)
+                      (ex-info "Unknown config." {:config config :available ctx-shared-config}))))
+
+(defn stream-priority-range
+  "Returns a vector of 2 numerical values that correspond to the least and greatest stream priorities.
+
+  See [cuCtxGetStreamPriorityRange](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  []
+  (let [least (int-array 1)
+        greatest (int-array 1)]
+    (with-check (JCudaDriver/cuCtxGetStreamPriorityRange least greatest)
+      [(aget least 0) (aget greatest 0)])))
+
+(defn context-info
+  "All info for the current context."
+  ([info-type]
+   (maybe
+    (case info-type
+      :api-version (api-version)
+      :cache-config (cache-config)
+      :stack-size (limit* CUlimit/CU_LIMIT_STACK_SIZE)
+      :malloc-heap-size (limit* CUlimit/CU_LIMIT_MALLOC_HEAP_SIZE)
+      :printf-fifo-size (limit* CUlimit/CU_LIMIT_PRINTF_FIFO_SIZE)
+      :dev-runtime-sync-depth (limit* CUlimit/CU_LIMIT_DEV_RUNTIME_SYNC_DEPTH)
+      :dev-runtime-pending-launch-count (limit* CUlimit/CU_LIMIT_DEV_RUNTIME_PENDING_LAUNCH_COUNT)
+      :limits (fmap limit* ctx-limits)
+      :device (ctx-device)
+      :shared-config (shared-config)
+      :stream-priority-range (stream-priority-range)
+      nil)))
+  ([]
+   (op {:api-version (maybe (api-version))
+        :cache-config (maybe (cache-config))
+        :device (maybe (ctx-device))
+        :shared-config (shared-config)
+        :stream-priority-range (stream-priority-range)}
+       (maybe (fmap limit* ctx-limits)))))
+
+(extend-type CUcontext
+  Info
+  (info
+    ([ctx info-type]
+     (maybe
+      (case info-type
+        :api-version (api-version ctx)
+        nil)))
+    ([ctx]
+     {:api-version (maybe (api-version ctx))})))

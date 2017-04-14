@@ -16,14 +16,17 @@
   (:require [uncomplicate.commons
              [core :refer [Releaseable release wrap-float wrap-double wrap-long wrap-int]]
              [utils :refer [mask]]]
+            [uncomplicate.fluokitten.core :refer [fmap]]
             [uncomplicate.clojurecuda
+             [protocols :refer :all]
              [constants :refer :all]
-             [utils :refer [with-check with-check-nvrtc nvrtc-error]]]
+             [info :refer [api-version cache-config limit* ctx-device]]
+             [utils :refer [with-check]]]
             [clojure.string :as str]
             [clojure.core.async :refer [go >!]])
   (:import [jcuda Pointer NativePointerObject]
            [jcuda.driver JCudaDriver CUdevice CUcontext CUdeviceptr CUmemAttach_flags CUmodule
-            CUfunction]
+            CUfunction ]
            [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]
            [java.nio ByteBuffer ByteOrder]))
 
@@ -43,11 +46,6 @@
   (release [dp]
     (with-check (JCudaDriver/cuMemFree dp) true)))
 
-(extend-type nvrtcProgram
-  Releaseable
-  (release [p]
-    (with-check-nvrtc (JNvrtc/nvrtcDestroyProgram p) true)))
-
 (extend-type CUmodule
   Releaseable
   (release [m]
@@ -58,7 +56,7 @@
   []
   (with-check (JCudaDriver/cuInit 0) true))
 
-;; ================== Device ====================================
+;; ================== Device Management ====================================
 
 (defn device-count
   "Returns the number of CUDA devices on the system."
@@ -74,7 +72,7 @@
   ([]
    (device 0)))
 
-;; =================== Context ==================================
+;; =================== Context Management ==================================
 
 (defn context*
   "Creates a CUDA context on the `device` using a raw integer `flag`.
@@ -91,7 +89,7 @@
   `:map-host`, `:lmem-resize-to-max`. The default is none.
   Must be released after use.
 
-  Also see [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html#group__CUDA__CTX_1g65dc0012348bc84810e2103a40d8e2cf).
+  Also see [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   ([dev flag]
    (context* dev (or (ctx-flags flag)
@@ -110,32 +108,49 @@
      (try ~@body
           (finally (release *context*)))))
 
-(defn synchronize
-  "TODO"
+(defn current-context
+  "Returns the CUDA context bound to the calling CPU thread.
+
+  See [cuCtxGetCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  []
+  (let [ctx (CUcontext.)]
+    (with-check (JCudaDriver/cuCtxGetCurrent ctx) ctx)))
+
+(defn current-context!
+  "Binds the specified CUDA context to the calling CPU thread.
+
+  See [cuCtxSetCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  [ctx]
+  (with-check (JCudaDriver/cuCtxSetCurrent ctx) ctx))
+
+(defn pop-context!
+  "Pops the current CUDA context from the current CPU thread.
+
+  See [cuCtxPopCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  []
+  (let [ctx (CUcontext.)]
+    (with-check (JCudaDriver/cuCtxPopCurrent ctx) ctx)))
+
+(defn push-context!
+  "Pushes a context on the current CPU thread.
+
+  See [cuCtxPushCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
+  [ctx]
+  (with-check (JCudaDriver/cuCtxPushCurrent ctx) ctx))
+
+(defn synchronize!
+  "Block for a context's tasks to complete."
   []
   (with-check (JCudaDriver/cuCtxSynchronize) true))
 
-;; ================== Memory ===================================
+;; ================== Module Management =====================================
 
-(defprotocol Mem
-  "An object that represents memory that participates in CUDA operations.
-  It can be on the device, or on the host.  Built-in implementations:
-  cuda pointers, Java primitive arrays and ByteBuffers"
-  (ptr [this]
-    "`Pointer` to this object.")
-  (size [this]
-    "Memory size of this cuda or host object in bytes.")
-  (memcpy-host* [this host size] [this host size hstream]))
 
-(defprotocol DeviceMem
-  (cu-ptr [this]
-    "CUDA `CUdeviceptr` to this object."))
 
-(defprotocol HostMem
-  (host-ptr [this]
-    "Host `Pointer` to this object.")
-  (host-buffer [this]
-    "The actual `ByteBuffer` on the host"))
 
 ;; ================== Polymorphic memcpy  ==============================================
 
@@ -184,7 +199,7 @@
 
   The memory is not cleared. `size` must be greater than `0`.
 
-  See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb82d2a09844a58dd9e744dc31e8aa467).
+  See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   [^long size]
   (let [cu (CUdeviceptr.)]
@@ -197,7 +212,7 @@
   Returns a [[CULinearmemory]] object.
   The memory is not cleared. `size` must be greater than `0`.
 
-  See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb347ded34dc326af404aa02af5388a32).
+  See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   ([^long size ^long flag]
    (let [cu (CUdeviceptr.)]
@@ -211,7 +226,7 @@
   Valid flags are: `:global`, `:host` and `:single` (the default).
   The memory is not cleared. `size` must be greater than `0`.
 
-  See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gb347ded34dc326af404aa02af5388a32).
+  See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   ([^long size flag]
    (mem-alloc-managed* size (or (mem-attach-flags flag)
@@ -264,7 +279,7 @@
 
   The memory is not cleared. `size` must be greater than `0`.
 
-  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1g572ca4011bfcb25034888a14d4e035b9).
+  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   [^long size ^long flags]
   (let [p (Pointer.)]
@@ -277,7 +292,7 @@
   Valid flags are: `:portable`, `:devicemap` and `:writecombined`. The default is none.
   The memory is not cleared. `size` must be greater than `0`.
 
-  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1g572ca4011bfcb25034888a14d4e035b9).
+  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   ([^long size flags]
    (mem-host-alloc* size (if (keyword? flags)
@@ -293,7 +308,7 @@
 
   The memory is not cleared. `size` must be greater than `0`.
 
-  See [cuMemAllocHost](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gdd8311286d2c2691605362c689bc64e0).
+  See [cuMemAllocHost](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   [^long size]
   (let [p (Pointer.)]
@@ -302,7 +317,7 @@
 (defn mem-host-register*
   "Registers previously allocated Java `memory` structure and pins it, using raw integer `flags`.
 
-   See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gf0a9fe11544326dabd743b7aa6b54223).
+   See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   [memory ^long flags]
   (let [p ^Pointer (ptr memory)
@@ -316,7 +331,7 @@
   Valid flags are: `:portable`, and `:devicemap`. The default is none.
   The memory is not cleared.
 
-  See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html#group__CUDA__MEM_1gf0a9fe11544326dabd743b7aa6b54223).
+  See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   ([memory flags]
    (mem-host-register* memory (if (keyword? flags)
@@ -468,59 +483,17 @@
     ([this cu byte-size hstream]
      (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
 
-;; ====================== Nvrtc program JIT ========================================
-
-(defn program*
-  "TODO"
-  [name source-code source-headers include-names]
-  (let [res (nvrtcProgram.)]
-    (with-check-nvrtc
-      (JNvrtc/nvrtcCreateProgram res source-code name (count source-headers) source-headers include-names)
-      res)))
-
-(defn program
-  "TODO"
-  ([name source-code headers]
-   (program* name source-code (into-array String (take-nth 2 (next headers)))
-                    (into-array String (take-nth 2 headers))))
-  ([name source-code]
-   (program* name source-code nil nil))
-  ([source-code]
-   (program* nil source-code nil nil)))
-
-(defn program-log
-  "TODO"
-  [^nvrtcProgram program]
-  (let [res (make-array String 1)]
-    (with-check-nvrtc (JNvrtc/nvrtcGetProgramLog program res) (aget ^objects res 0))))
-
-(defn compile*
-  "TODO"
-  ([^nvrtcProgram program options]
-   (let [err (JNvrtc/nvrtcCompileProgram program (count options) options)]
-     (if (= nvrtcResult/NVRTC_SUCCESS err)
-       program
-       (throw (nvrtc-error err (program-log program)))))))
-
-(defn compile!
-  "TODO"
-  ([^nvrtcProgram program options]
-   (compile* program (into-array String options)))
-  ([^nvrtcProgram program]
-   (compile* program nil)))
-
-(defn ptx
-  "TODO"
-  [^nvrtcProgram program]
-  (let [res (make-array String 1)]
-    (with-check-nvrtc (JNvrtc/nvrtcGetPTX program res) (aget ^objects res 0))))
-
 ;; ========================= Module ==============================================
+
+(extend-type String
+  ModuleData
+  (load-data [data m]
+    (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m data) m)))
 
 (defn load-data!
   "TODO"
   [^CUmodule m data]
-  (with-check (JCudaDriver/cuModuleLoadData m (str (if (instance? nvrtcProgram data) (ptx data) data))) m))
+  (load-data data m))
 
 (defn module
   "TODO"
@@ -581,3 +554,55 @@
    (launch! fun work-size 0 hstream params))
   ([^CUfunction fun ^WorkSize work-size ^Pointer params]
    (launch! fun work-size 0 nil params)))
+
+;; ================== Peer Context Memory Access =============================
+
+(defn can-access-peer
+  "Queries if a device may directly access a peer device's memory.
+
+  See [cuDeviceCanAccessPeer](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
+  "
+  [dev peer]
+  (let [res (int-array 1)]
+    (with-check (JCudaDriver/cuDeviceCanAccessPeer res dev peer) (pos? (aget res 0)))))
+
+(defn p2p-attribute*
+  "Queries attributes of the link between two devices.
+
+  See [cuDeviceGetP2PAttribute](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
+  "
+  [dev peer ^long attribute]
+  (let [res (int-array 1)]
+    (with-check (JCudaDriver/cuDeviceGetP2PAttribute res attribute dev peer) (pos? (aget res 0)))))
+
+(defn p2p-attribute
+  "Queries attributes of the link between two devices.
+
+  See [cuDeviceGetP2PAttribute](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
+  "
+  [dev peer attribute]
+  (p2p-attribute* dev peer (or (p2p-attributes attribute)
+                              (throw (ex-info "Unknown p2p attribute"
+                                              {:attribute attribute :available p2p-attributes})))))
+
+(defn disable-peer-access!
+  "Disables direct access to memory allocations in a peer context and unregisters any registered allocations.
+
+  See [cuCtxDisablePeerAccess](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
+  "
+  ([ctx]
+   (let [res (int-array 1)]
+     (with-check (JCudaDriver/cuCtxDisablePeerAccess ctx) ctx)))
+  ([]
+   (disable-peer-access! *context*)))
+
+(defn enable-peer-access!
+  "Enables direct access to memory allocations in a peer context and unregisters any registered allocations.
+
+  See [cuCtxEnablePeerAccess](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
+  "
+  ([ctx]
+   (let [res (int-array 1)]
+     (with-check (JCudaDriver/cuCtxEnablePeerAccess ctx 0) ctx)))
+  ([]
+   (enable-peer-access! *context*)))

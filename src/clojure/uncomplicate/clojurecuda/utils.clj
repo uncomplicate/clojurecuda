@@ -14,8 +14,7 @@
   (:require [uncomplicate.commons.utils :as cu])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer DirectByteBuffer]
-           jcuda.driver.CUresult
-           jcuda.nvrtc.nvrtcResult))
+           jcuda.driver.CUresult))
 
 ;; ============= Error Codes ===================================================
 
@@ -42,15 +41,6 @@
   ([err-code]
    (error err-code nil)))
 
-(defn nvrtc-error
-  "Converts an CUDA Nvrtc error code to an ExceptionInfo with richer, user-friendly information. "
-  ([^long err-code details]
-   (let [err (nvrtcResult/stringFor err-code)]
-     (ex-info (format "NVRTC error: %s." err)
-              {:name err :code err-code :type :nvrtc-error :details details})))
-  ([err-code]
-   (error err-code nil)))
-
 (defmacro with-check
   "Evaluates `form` if `err-code` is not zero (`CUDA_SUCCESS`), otherwise throws
   an appropriate `ExceptionInfo` with decoded informative details.
@@ -63,15 +53,6 @@
   "
   ([err-code form]
    `(cu/with-check error ~err-code ~form)))
-
-(defmacro with-check-nvrtc
-  "Evaluates `form` if `err-code` is not zero (`NVRTC_SUCCESS`), otherwise throws
-  an appropriate `ExceptionInfo` with decoded informative details.
-  It helps fith JCuda nvrtc methods that return error codes directly, while
-  returning computation results through side-effects in arguments.
-  "
-  ([err-code form]
-   `(cu/with-check nvrtc-error ~err-code ~form)))
 
 (defmacro with-check-arr
   "Evaluates `form` if the integer in the `err-code` primitive int array is `0`,

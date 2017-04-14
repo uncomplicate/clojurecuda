@@ -16,5 +16,17 @@
            [java.nio ByteBuffer ByteOrder]))
 
 (facts
- "info tests."
+ "Driver info tests."
+ (pos? (driver-version)) => true)
+
+(facts
+ "Device info tests."
  (count (info (device 0))) => 82)
+
+(with-release [ctx (context (device))]
+  (facts
+   "Context info tests."
+   (count (info ctx)) => 1
+   (limit! :stack-size 512) => 512
+   (limit :stack-size) => 512
+   (count (context-info)) => 10))

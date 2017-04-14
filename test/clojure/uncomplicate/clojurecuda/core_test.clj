@@ -10,6 +10,7 @@
   (:require [midje.sweet :refer :all]
             [uncomplicate.commons.core :refer [release with-release]]
             [uncomplicate.clojurecuda
+             [protocols :refer [size host-buffer]]
              [core :refer :all]])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
@@ -34,7 +35,20 @@
    (release ctx) => true
    (context dev :unknown) => (throws ExceptionInfo)
    (with-context (context dev :sched-blocking-sync)
-     *context* => truthy)))
+     *context* => truthy
+     (current-context) => *context*
+     (current-context! ctx) => ctx
+     (current-context) => ctx
+     )))
+
+(facts
+ "Peer access tests"
+ (let [dev (device)]
+   (with-context (context dev)
+     (when (can-access-peer dev dev)
+       (enable-peer-access!) => *context*
+       (disable-peer-access!) => *context*)
+     (p2p-attribute dev dev :access-supported) => (throws UnsupportedOperationException))))
 
 (with-context (context (device 0) :map-host)
 
