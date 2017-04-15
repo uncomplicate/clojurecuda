@@ -15,7 +15,8 @@
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 
-;; ================== Driver tests ========================
+;; ================== Driver tests ======================================================
+
 (facts
  "Driver tests."
  (init) => true)
@@ -26,6 +27,8 @@
  (device 0) => truthy
  (device -1) => (throws ExceptionInfo)
  (device 33) => (throws ExceptionInfo))
+
+;; ===================== Context Management Tests =======================================
 
 (facts
  "Context tests"
@@ -38,17 +41,15 @@
      *context* => truthy
      (current-context) => *context*
      (current-context! ctx) => ctx
-     (current-context) => ctx
-     )))
+     (current-context) => ctx)))
 
-(facts
- "Peer access tests"
- (let [dev (device)]
-   (with-context (context dev)
-     (when (can-access-peer dev dev)
-       (enable-peer-access!) => *context*
-       (disable-peer-access!) => *context*)
-     (p2p-attribute dev dev :access-supported) => (throws UnsupportedOperationException))))
+;; =============== Module Management Tests ==============================================
+
+(with-context (context (device))
+  (facts
+   "TODO global, program, etc."))
+
+;; =============== Memory Management Tests ==============================================
 
 (with-context (context (device 0) :map-host)
 
@@ -112,6 +113,15 @@
      (size cuda0) => Float/BYTES
      (.putFloat host0 0 44.0)
      (memcpy! cuda0 cuda1) => cuda1
-     (.getFloat host1 0) => 44.0))
+     (.getFloat host1 0) => 44.0)))
 
-  )
+;; ================= Peer Access Management Tests =====================================
+
+(facts
+ "Peer access tests"
+ (let [dev (device)]
+   (with-context (context dev)
+     (when (can-access-peer dev dev)
+       (enable-peer-access!) => *context*
+       (disable-peer-access!) => *context*)
+     (p2p-attribute dev dev :access-supported) => (throws UnsupportedOperationException))))

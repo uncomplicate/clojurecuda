@@ -16,7 +16,7 @@
              [core :refer [Releaseable release]]
              [utils :as cu]]
             [uncomplicate.clojurecuda
-             [protocols :refer [ModuleData load-data]]
+             [protocols :refer [ModuleLoad module-load]]
              [utils :refer [with-check error]]])
   (:import [jcuda.driver JCudaDriver CUmodule]
            [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]))
@@ -94,6 +94,6 @@
   Releaseable
   (release [p]
     (with-check-nvrtc (JNvrtc/nvrtcDestroyProgram p) true))
-  ModuleData
-  (load-data [data m]
+  ModuleLoad
+  (module-load [data m]
     (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m (ptx data)) m)))

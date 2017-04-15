@@ -147,11 +147,6 @@
   []
   (with-check (JCudaDriver/cuCtxSynchronize) true))
 
-;; ================== Module Management =====================================
-
-
-
-
 ;; ================== Polymorphic memcpy  ==============================================
 
 (defn memcpy!
@@ -483,77 +478,108 @@
     ([this cu byte-size hstream]
      (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
 
-;; ========================= Module ==============================================
+;; ================== Module Management =====================================
 
 (extend-type String
-  ModuleData
-  (load-data [data m]
+  ModuleLoad
+  (module-load [data m]
     (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m data) m)))
 
-(defn load-data!
-  "TODO"
+(extend-type (Class/forName "[B")
+  ModuleLoad
+  (module-load [binary m]
+    (with-check (JCudaDriver/cuModuleLoadFatBinary ^CUmodule m ^bytes binary) m)))
+
+(defn load!
+  "Load a module's data from a [[ntrtc/ptx]] string, `nvrtcProgram`, or a binary `data`, for already
+  existing module.
+
+  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
+  "
   [^CUmodule m data]
-  (load-data data m))
+  (module-load data m))
 
 (defn module
-  "TODO"
+  "Creates a new CUDA module and loads a string, `nvrtcProgram`, or a binary `data`."
   ([]
    (CUmodule.))
   ([data]
-   (load-data! (CUmodule.) data)))
+   (load! (CUmodule.) data)))
 
-;; ========================= Function ===========================================
+(defrecord GridDim [^long grid-x ^long grid-y ^long grid-z ^long block-x ^long block-y ^long block-z])
 
-(defrecord WorkSize [^long grid-x ^long grid-y ^long grid-z ^long block-x ^long block-y ^long block-z])
-
-(defn work-size-1d
-  "TODO"
+(defn grid-1d
+  "Creates a 1-dimensional [[GridDim]] record with grid and block dimensions x."
   ([^long grid-x]
-   (WorkSize. grid-x 1 1 256 1 1))
+   (GridDim. grid-x 1 1 256 1 1))
   ([^long grid-x ^long block-x]
-   (WorkSize. grid-x 1 1 block-x 1 1)))
+   (GridDim. grid-x 1 1 block-x 1 1)))
 
-(defn work-size-2d
-  "TODO"
+(defn grid-2d
+  "Creates a 2-dimensional [[GridDim]] record with grid and block dimensions x and y."
   ([^long grid-x ^long grid-y]
-   (WorkSize. grid-x grid-y 1 256 1 1))
+   (GridDim. grid-x grid-y 1 256 1 1))
   ([^long grid-x ^long grid-y ^long block-x]
-   (WorkSize. grid-x grid-y 1 block-x 1 1))
+   (GridDim. grid-x grid-y 1 block-x 1 1))
   ([^long grid-x ^long grid-y ^long block-x ^long block-y]
-   (WorkSize. grid-x grid-y 1 block-x block-y 1)))
+   (GridDim. grid-x grid-y 1 block-x block-y 1)))
 
-(defn work-size-3d
-  "TODO"
+(defn grid-3d
+  "Creates a 3-dimensional [[GridDim]] record with grid and block dimensions x, y, and z."
   ([^long grid-x ^long grid-y ^long grid-z]
-   (WorkSize. grid-x grid-y grid-z 256 1 1))
+   (GridDim. grid-x grid-y grid-z 256 1 1))
   ([^long grid-x ^long grid-y ^long grid-z ^long block-x]
-   (WorkSize. grid-x grid-y grid-z block-x 1 1))
+   (GridDim. grid-x grid-y grid-z block-x 1 1))
   ([grid-x grid-y grid-z block-x block-y block-z]
-   (WorkSize. grid-x grid-y grid-z block-x block-y block-z)))
+   (GridDim. grid-x grid-y grid-z block-x block-y block-z)))
 
 (defn function
-  "TODO"
+  "Returns CUDA kernel function named `name` from module `m`.
+
+  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
+  "
   [^CUmodule m name]
   (let [res (CUfunction.)]
     (with-check (JCudaDriver/cuModuleGetFunction res m name) res)))
 
+(defn global
+  "Returns CUDA global `CULinearMemory` named `name` from module `m`, with optionally specified size..
+
+  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
+  "
+  ([^CUmodule m name ^long size]
+   (let [res (CUdeviceptr.)]
+     (with-check (JCudaDriver/cuModuleGetGlobal res size m name) (cu-linear-memory res size))))
+  ([^CUmodule m name]
+   (let [res (CUdeviceptr.)]
+     (with-check (JCudaDriver/cuModuleGetGlobal res nil m name) (cu-linear-memory res size)))))
+
 (defn parameters
-  "TODO"
+  "Creates a `Pointer` to an array of `Pointer`s to CUDA `params`. `params` can be any object on
+  device ([[CULinearmemory]] for example), or host (arrays, numbers) that makes sense as a kernel
+  parameter per CUDA specification. Use the result as an argument in [[launch!]].
+  "
   [& params]
   (Pointer/to ^"[Ljcuda.Pointer;" (into-array Pointer (map ptr params))))
 
 (defn launch!
-  "TODO"
-  ([^CUfunction fun ^WorkSize work-size shared-mem-bytes hstream ^Pointer params]
+  "Invokes the kernel `fun` on a grid-dim grid of blocks, using parameters `params`.
+
+  Optionally, you can specify the amount of shared memory that will be available to each thread block,
+  and `hstream` to use for execution.
+
+  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
+  "
+  ([^CUfunction fun ^GridDim grid-dim shared-mem-bytes hstream ^Pointer params]
    (with-check
-     (JCudaDriver/cuLaunchKernel fun (.grid-x work-size) (.grid-y work-size) (.grid-z work-size)
-                                 (.block-x work-size) (.block-y work-size) (.block-z work-size)
+     (JCudaDriver/cuLaunchKernel fun (.grid-x grid-dim) (.grid-y grid-dim) (.grid-z grid-dim)
+                                 (.block-x grid-dim) (.block-y grid-dim) (.block-z grid-dim)
                                  shared-mem-bytes hstream params nil)
      fun))
-  ([^CUfunction fun ^WorkSize work-size hstream ^Pointer params]
-   (launch! fun work-size 0 hstream params))
-  ([^CUfunction fun ^WorkSize work-size ^Pointer params]
-   (launch! fun work-size 0 nil params)))
+  ([^CUfunction fun ^GridDim grid-dim hstream ^Pointer params]
+   (launch! fun grid-dim 0 hstream params))
+  ([^CUfunction fun ^GridDim grid-dim ^Pointer params]
+   (launch! fun grid-dim 0 nil params)))
 
 ;; ================== Peer Context Memory Access =============================
 

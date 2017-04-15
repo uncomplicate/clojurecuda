@@ -32,6 +32,6 @@
        "Vector add JCuda example."
        (memcpy-host! host-a gpu-a)
        (memcpy-host! host-b gpu-b)
-       (launch! add (work-size-1d (count host-sum)) (parameters (count host-sum) gpu-a gpu-b gpu-sum))
+       (launch! add (grid-1d (count host-sum)) (parameters (count host-sum) gpu-a gpu-b gpu-sum))
        (synchronize!)
        (seq (memcpy-host! gpu-sum host-sum)) => (seq [3.0 5.0 7.0])))))

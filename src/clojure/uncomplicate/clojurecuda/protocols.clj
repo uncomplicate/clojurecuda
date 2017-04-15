@@ -29,5 +29,6 @@
   (host-buffer [this]
     "The actual `ByteBuffer` on the host"))
 
-(defprotocol ModuleData
-  (load-data [data m]))
+(defprotocol ModuleLoad
+  (module-load [data m])
+  (module-load-jit [data m options]))
