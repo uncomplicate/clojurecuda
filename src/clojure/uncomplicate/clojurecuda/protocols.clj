@@ -13,21 +13,16 @@
   "An object that represents memory that participates in CUDA operations.
   It can be on the device, or on the host.  Built-in implementations:
   cuda pointers, Java primitive arrays and ByteBuffers"
-  (ptr [this]
-    "`Pointer` to this object.")
-  (size [this]
-    "Memory size of this cuda or host object in bytes.")
+  (ptr [this] "`Pointer` to this object.")
+  (size [this] "Memory size of this cuda or host object in bytes.")
   (memcpy-host* [this host size] [this host size hstream]))
 
 (defprotocol DeviceMem
-  (cu-ptr [this]
-    "CUDA `CUdeviceptr` to this object."))
+  (cu-ptr [this] "CUDA `CUdeviceptr` to this object."))
 
 (defprotocol HostMem
-  (host-ptr [this]
-    "Host `Pointer` to this object.")
-  (host-buffer [this]
-    "The actual `ByteBuffer` on the host"))
+  (host-ptr [this] "Host `Pointer` to this object.")
+  (host-buffer [this] "The actual `ByteBuffer` on the host"))
 
 (defprotocol ModuleLoad
   (module-load [data m])

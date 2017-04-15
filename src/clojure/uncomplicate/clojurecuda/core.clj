@@ -65,10 +65,14 @@
     (with-check (JCudaDriver/cuDeviceGetCount res) (aget res 0))))
 
 (defn device
-  "Returns a device specified with its ordinal number `ord`."
-  ([^long ord]
+  "Returns a device specified with its ordinal number or string `id`"
+  ([id]
    (let [res (CUdevice.)]
-     (with-check (JCudaDriver/cuDeviceGet res ord) res)))
+     (with-check
+       (if (number? id)
+         (JCudaDriver/cuDeviceGet res id)
+         (JCudaDriver/cuDeviceGetByPCIBusId res id))
+       res)))
   ([]
    (device 0)))
 
@@ -147,15 +151,24 @@
   []
   (with-check (JCudaDriver/cuCtxSynchronize) true))
 
-;; ================== Polymorphic memcpy  ==============================================
+;; ================== Memory Management  ==============================================
 
 (defn memcpy!
+  "Copies `byte-count` or all possible device memory from `src` to `dst`.
+
+  See [cuMemcpy](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)"
   ([src dst ^long byte-count]
    (with-check (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) byte-count) dst))
   ([src dst]
    (memcpy! src dst (min (long (size src)) (long (size dst))))))
 
 (defn memcpy-host!
+  "Copies `byte-count` or all possible memory from `src` to `dst`, one of which
+  has to be accessible from the host. If `hstream` is provided, the copy is asynchronous.
+  Polymorphic function that figures out what needs to be done.
+
+  See [cuMemcpyXtoY](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
+  "
   ([src dst ^long byte-count hstream]
    (memcpy-host* src dst byte-count hstream))
   ([src dst arg]
@@ -164,6 +177,21 @@
      (memcpy-host* src dst (min (long (size src)) (long (size dst))) arg)))
   ([src dst]
    (memcpy-host* src dst (min (long (size src)) (long (size dst))))))
+
+(defn memset!
+  "Sets `len` or all 32-bit segments of `cu-mem` to 32-bit integer `value`. If `hstream` is
+  provided, does this asynchronously.
+
+  See [cuMemset32D](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
+  "
+  ([cu-mem ^long value]
+   (memset! cu-mem value (long (/ (long (size cu-mem)) Integer/BYTES))))
+  ([cu-mem ^long value arg]
+   (if (integer? arg)
+     (with-check (JCudaDriver/cuMemsetD32 (cu-ptr cu-mem) value arg) cu-mem)
+     (memset! cu-mem value (/ (long (size cu-mem)) Integer/BYTES) arg)))
+  ([cu-mem ^long value ^long len hstream]
+   (with-check (JCudaDriver/cuMemsetD32Async (cu-ptr cu-mem) value len hstream) cu-mem)))
 
 ;; ==================== Linear memory ================================================
 

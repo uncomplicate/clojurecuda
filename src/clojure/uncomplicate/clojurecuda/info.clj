@@ -337,6 +337,10 @@
   (info-attribute* JCudaDriver/cuDeviceGetAttribute device
                    CUdevice_attribute/CU_DEVICE_ATTRIBUTE_PCI_BUS_ID))
 
+(defn pci-bus-id-string [^CUdevice device]
+  (let [res (make-array String 1)]
+    (with-check (JCudaDriver/cuDeviceGetPCIBusId res 64 device) (aget ^objects res 0))))
+
 (defn pci-device-id ^long [^CUdevice device]
   (info-attribute* JCudaDriver/cuDeviceGetAttribute device
                    CUdevice_attribute/CU_DEVICE_ATTRIBUTE_PCI_DEVICE_ID))
@@ -450,6 +454,7 @@
    :multi-gpu-board-group-id multi-gpu-board-group-id
    :multiprocessor-count multiprocessor-count
    :pci-bus-id pci-bus-id
+   :pci-bus-id-string pci-bus-id-string
    :pci-device-id pci-device-id
    :pci-domain-id pci-domain-id
    :stream-priorities-supported stream-priorities-supported

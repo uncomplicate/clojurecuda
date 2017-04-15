@@ -11,6 +11,7 @@
             [uncomplicate.commons.core :refer [release with-release]]
             [uncomplicate.clojurecuda
              [protocols :refer [size host-buffer]]
+             [info :refer [pci-bus-id-string]]
              [core :refer :all]])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
@@ -26,7 +27,8 @@
  (<= 0 (device-count)) => true
  (device 0) => truthy
  (device -1) => (throws ExceptionInfo)
- (device 33) => (throws ExceptionInfo))
+ (device 33) => (throws ExceptionInfo)
+ (device (pci-bus-id-string (device))) => (device))
 
 ;; ===================== Context Management Tests =======================================
 
@@ -88,6 +90,19 @@
      (.putFloat ^ByteBuffer (host-buffer mapped-host) 0 14) => (host-buffer mapped-host)
      (memcpy-host! mapped-host host) => host
      (aget ^floats host 0) => 14.0))
+
+  (facts
+   "memset tests."
+   (with-release [mapped-host (mem-alloc-host (* 2 Integer/BYTES))
+                  host (int-array 2)]
+     (.putInt ^ByteBuffer (host-buffer mapped-host) 0 24) => (host-buffer mapped-host)
+     (.putInt ^ByteBuffer (host-buffer mapped-host) Integer/BYTES 34) => (host-buffer mapped-host)
+     (memcpy-host! mapped-host host) => host
+     (seq host) => (list 24 34)
+     (memcpy-host! (memset! mapped-host 0 1) host)
+     (seq host) => (list 0 34)
+     (memcpy-host! (memset! mapped-host 0) host)
+     (seq host) => (list 0 0)) )
 
   (facts
    "mem-alloc-managed tests."

@@ -21,7 +21,7 @@
 
 (facts
  "Device info tests."
- (count (info (device 0))) => 82)
+ (count (info (device 0))) => 83)
 
 (with-release [ctx (context (device))]
   (facts
