@@ -1,6 +1,6 @@
 # ClojureCUDA
 
-Clojure library for CUDA development
+Clojure library for CUDA development. See the documentation at [ClojureCUDA website](http://clojurecuda.uncomplicate.org).
 
 ## License
 
