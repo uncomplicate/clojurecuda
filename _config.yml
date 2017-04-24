@@ -1,0 +1,14 @@
+source:      .
+destination: ./_site
+plugins_dir:     ./_plugins
+exclude: [bin, CNAME, Gemfile, Gemfile.lock, README.md, Dockerfile, fig.yml]
+permalink: /:title
+highlighter: rouge
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  auto_ids:       true
+gems:
+  - jekyll-sitemap
+port: 4005
