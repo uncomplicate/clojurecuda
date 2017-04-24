@@ -9,14 +9,13 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.core
   "Core ClojureCUDA functions for CUDA **host** programming. The kernels should
-  be provided as strings (that may be stored in files), written in CUDA C.
+  be provided as strings (that may be stored in files) or binaries, written in CUDA C/C++.
 
   Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
              [core :refer [Releaseable release wrap-float wrap-double wrap-long wrap-int]]
              [utils :refer [mask]]]
-            [uncomplicate.fluokitten.core :refer [fmap]]
             [uncomplicate.clojurecuda
              [protocols :refer :all]
              [constants :refer :all]
@@ -26,7 +25,7 @@
             [clojure.core.async :refer [go >!]])
   (:import [jcuda Pointer NativePointerObject]
            [jcuda.driver JCudaDriver CUdevice CUcontext CUdeviceptr CUmemAttach_flags CUmodule
-            CUfunction ]
+            CUfunction CUstream CUstream_flags CUresult CUstreamCallback CUevent CUevent_flags]
            [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]
            [java.nio ByteBuffer ByteOrder]))
 
@@ -50,6 +49,16 @@
   Releaseable
   (release [m]
     (with-check (JCudaDriver/cuModuleUnload m) true)))
+
+(extend-type CUstream
+  Releaseable
+  (release [s]
+    (with-check (JCudaDriver/cuStreamDestroy s) true)))
+
+(extend-type CUevent
+  Releaseable
+  (release [e]
+    (with-check (JCudaDriver/cuEventDestroy e) true)))
 
 (defn init
   "Initializes the CUDA driver."
@@ -146,11 +155,6 @@
   [ctx]
   (with-check (JCudaDriver/cuCtxPushCurrent ctx) ctx))
 
-(defn synchronize!
-  "Block for a context's tasks to complete."
-  []
-  (with-check (JCudaDriver/cuCtxSynchronize) true))
-
 ;; ================== Memory Management  ==============================================
 
 (defn memcpy!
@@ -195,10 +199,10 @@
 
 ;; ==================== Linear memory ================================================
 
-(deftype CULinearMemory [^CUdeviceptr cu ^Pointer p ^long s]
+(deftype CULinearMemory [^CUdeviceptr cu ^Pointer p ^long s in-module]
   Releaseable
   (release [_]
-    (release cu))
+    (if-not in-module (release cu) true))
   DeviceMem
   (cu-ptr [_]
     cu)
@@ -212,10 +216,13 @@
   (memcpy-host* [this host byte-size hstream]
     (with-check (JCudaDriver/cuMemcpyDtoHAsync (host-ptr host) cu byte-size hstream) host)))
 
-(defn ^:private cu-linear-memory [^CUdeviceptr cu ^long size]
-  (let [cu-arr (make-array CUdeviceptr 1)]
-    (aset ^"[Ljcuda.driver.CUdeviceptr;" cu-arr 0 cu)
-    (CULinearMemory. cu (Pointer/to ^"[Ljcuda.driver.CUdeviceptr;" cu-arr) size)))
+(defn ^:private cu-linear-memory
+  ([^CUdeviceptr cu ^long size in-module]
+   (let [cu-arr (make-array CUdeviceptr 1)]
+     (aset ^"[Ljcuda.driver.CUdeviceptr;" cu-arr 0 cu)
+     (CULinearMemory. cu (Pointer/to ^"[Ljcuda.driver.CUdeviceptr;" cu-arr) size in-module)))
+  ([^CUdeviceptr cu ^long size]
+   (cu-linear-memory cu size false)))
 
 (defn mem-alloc
   "Allocates the `size` bytes of memory on the device. Returns a [[CULinearmemory]] object.
@@ -561,26 +568,17 @@
   ([grid-x grid-y grid-z block-x block-y block-z]
    (GridDim. grid-x grid-y grid-z block-x block-y block-z)))
 
-(defn function
-  "Returns CUDA kernel function named `name` from module `m`.
-
-  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
-  "
-  [^CUmodule m name]
-  (let [res (CUfunction.)]
-    (with-check (JCudaDriver/cuModuleGetFunction res m name) res)))
-
 (defn global
   "Returns CUDA global `CULinearMemory` named `name` from module `m`, with optionally specified size..
 
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
-  ([^CUmodule m name ^long size]
-   (let [res (CUdeviceptr.)]
-     (with-check (JCudaDriver/cuModuleGetGlobal res size m name) (cu-linear-memory res size))))
-  ([^CUmodule m name]
-   (let [res (CUdeviceptr.)]
-     (with-check (JCudaDriver/cuModuleGetGlobal res nil m name) (cu-linear-memory res size)))))
+  [^CUmodule m name]
+  (let [res (CUdeviceptr.)
+        byte-size (long-array 1)]
+    (with-check
+      (JCudaDriver/cuModuleGetGlobal res byte-size m name)
+      (cu-linear-memory res (aget byte-size 0) true))))
 
 (defn parameters
   "Creates a `Pointer` to an array of `Pointer`s to CUDA `params`. `params` can be any object on
@@ -589,6 +587,17 @@
   "
   [& params]
   (Pointer/to ^"[Ljcuda.Pointer;" (into-array Pointer (map ptr params))))
+
+;; ====================== Execution Control ==================================
+
+(defn function
+  "Returns CUDA kernel function named `name` from module `m`.
+
+  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
+  "
+  [m name]
+  (let [res (CUfunction.)]
+    (with-check (JCudaDriver/cuModuleGetFunction res m name) res)))
 
 (defn launch!
   "Invokes the kernel `fun` on a grid-dim grid of blocks, using parameters `params`.
@@ -608,6 +617,127 @@
    (launch! fun grid-dim 0 hstream params))
   ([^CUfunction fun ^GridDim grid-dim ^Pointer params]
    (launch! fun grid-dim 0 nil params)))
+
+;; ================== Stream Management ======================================
+
+(defn stream*
+  "Create a stream using an optional `priority` and an integer `flag`.
+
+  See [cuStreamCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
+  "
+  ([^long flag]
+   (let [res (CUstream.)]
+     (with-check (JCudaDriver/cuStreamCreate res flag) res)))
+  ([^long priority ^long flag]
+   (let [res (CUstream.)]
+     (with-check (JCudaDriver/cuStreamCreateWithPriority res flag priority) res))))
+
+(defn stream
+  "Create a stream using an optional integer `priority` and a keyword `flag`.
+
+  Valid `flag`s are `:default` and `:non-blocking`.
+
+  See [cuStreamCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
+  "
+  ([]
+   (stream* CUstream_flags/CU_STREAM_DEFAULT))
+  ([flag]
+   (stream* (or (stream-flags flag)
+                (throw (ex-info "Invaling stream flag." {:flag flag :available stream-flags})))))
+  ([^long priority flag]
+   (stream* priority (or (stream-flags flag)
+                         (throw (ex-info "Invaling stream flag." {:flag flag :available stream-flags}))))))
+
+(defn ready?
+  "Determine status (ready or not) of a compute stream or event.
+
+  See [cuStreamQuery](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html),
+  and [cuEventQuery](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+"
+  [obj]
+  (= CUresult/CUDA_SUCCESS (if (instance? CUstream obj)
+                             (JCudaDriver/cuStreamQuery obj)
+                             (JCudaDriver/cuEventQuery obj))))
+
+(defn synchronize!
+  "Block for the current context's or `stream`'s tasks to complete."
+  ([]
+   (with-check (JCudaDriver/cuCtxSynchronize) true))
+  ([hstream]
+   (with-check (JCudaDriver/cuStreamSynchronize hstream) hstream)))
+
+(defrecord StreamCallbackInfo [^CUstream hstream status data])
+
+(deftype StreamCallback [ch]
+  CUstreamCallback
+  (call [this hstream status data]
+    (go (>! ch (->StreamCallbackInfo hstream (CUresult/stringFor status) data)))))
+
+(defn callback
+  "Creates a [[StreamCallback]] that writes [[StreamCallbackInfo]] into async channel `ch`."
+  [ch]
+  (StreamCallback. ch))
+
+(defn add-callback!
+  "Adds a [[StreamCallback]] to a compute stream, with optional `data` related to the call.
+
+  See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
+  ([hstream ^StreamCallback callback data]
+   (with-check (JCudaDriver/cuStreamAddCallback hstream callback data 0) hstream))
+  ([hstream ^StreamCallback callback]
+   (with-check (JCudaDriver/cuStreamAddCallback hstream callback nil 0) hstream)))
+
+(defn wait-event!
+  "Make a compute stream `hstream` wait on an event `ev
+
+  See [cuStreamWaitEvent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
+  [hstream ev]
+  (with-check (JCudaDriver/cuStreamWaitEvent hstream ev 0) hstream))
+
+;; ================== Event Management =======================================
+
+(defn event*
+  "Creates an event specified by integer `flags`.
+
+  See [cuEventCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+  "
+  [^long flags]
+  (let [res (CUevent.)]
+    (with-check (JCudaDriver/cuEventCreate res flags) res)))
+
+(defn event
+  "Creates an event specified by keyword `flags`.
+
+  Available flags are `:default`, `:blocking-sync`, `:disable-timing`, and `:interprocess`.
+
+  See [cuEventCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+  "
+  ([]
+   (event* CUevent_flags/CU_EVENT_DEFAULT))
+  ([flag & flags]
+   (event* (if flags
+             (mask event-flags (cons flag flags))
+             (or (event-flags flag)
+                 (throw (ex-info "Unknown event flag." {:flag flag :available event-flags})))))))
+
+(defn elapsed-time
+  "Computes the elapsed time in milliseconds between `start-event` and `end-event`.
+
+  See [cuEventElapsedTime](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+  "
+  ^double [start-event end-event]
+  (let [res (float-array 1)]
+    (with-check (JCudaDriver/cuEventElapsedTime res start-event end-event) (aget res 0))))
+
+(defn record!
+  "Records an event `ev` on optional `stream`.
+
+  See [cuEventRecord](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+  "
+  ([stream event]
+   (with-check (JCudaDriver/cuEventRecord event stream) stream))
+  ([event]
+   (with-check (JCudaDriver/cuEventRecord event nil) nil)))
 
 ;; ================== Peer Context Memory Access =============================
 

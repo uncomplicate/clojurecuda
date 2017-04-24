@@ -8,11 +8,13 @@
 
 (ns uncomplicate.clojurecuda.core-test
   (:require [midje.sweet :refer :all]
+            [clojure.core.async :refer [chan]]
             [uncomplicate.commons.core :refer [release with-release]]
             [uncomplicate.clojurecuda
              [protocols :refer [size host-buffer]]
              [info :refer [pci-bus-id-string]]
-             [core :refer :all]])
+             [core :refer :all]
+             [nvrtc :refer [compile! program]]])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 
@@ -45,11 +47,54 @@
      (current-context! ctx) => ctx
      (current-context) => ctx)))
 
-;; =============== Module Management Tests ==============================================
+;; =============== Module Management & Execution Control Tests =====================================
 
-(with-context (context (device))
+(let [program-source (slurp "test/cuda/test.cu")
+      cnt 300
+      extra 5]
+  (with-context (context (device))
+    (with-release [prog (compile! (program program-source))
+                   grid (grid-1d cnt (min 256 cnt))]
+
+      (with-release [modl (module prog)
+                     fun (function modl "inc")
+                     host-a (float-array (+ cnt extra))
+                     gpu-a (mem-alloc (* Float/BYTES (+ cnt extra)))]
+        (aset-float host-a 0 1)
+        (aset-float host-a 10 100)
+        (memcpy-host! host-a gpu-a)
+        (launch! fun grid (parameters cnt gpu-a))
+        (synchronize!)
+        (memcpy-host! gpu-a host-a)
+        (facts
+         (aget host-a 0) => 2.0
+         (aget host-a 10) => 101.0
+         (aget host-a (dec cnt)) => 1.0
+         (aget host-a cnt) => 0.0
+         (aget host-a (dec (+ cnt extra))) => 0.0))
+
+      (with-release [modl (module)]
+        (facts
+         (load! modl prog) => modl
+         (seq (memcpy-host! (global modl "gpu_a") (float-array 3))) => (seq [1.0 2.0 3.0]))))))
+
+;; =============== Stream Management Tests ==============================================
+
+(with-context (context (device 0) :map-host)
+
   (facts
-   "TODO global, program, etc."))
+   "Stream creation and memory copy tests."
+   (with-release [strm (stream :non-blocking)
+                  cuda1 (mem-alloc Float/BYTES)
+                  cuda2 (mem-alloc Float/BYTES)
+                  host1 (float-array [173.0])
+                  host2 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))]
+     (memcpy-host! host1 cuda1 strm) => cuda1
+     (synchronize! strm)
+     (memcpy! cuda1 cuda2) => cuda2
+     (memcpy-host! cuda2 host2 strm) => host2
+     (synchronize! strm)
+     (.getFloat ^ByteBuffer host2 0) => 173.0)))
 
 ;; =============== Memory Management Tests ==============================================
 

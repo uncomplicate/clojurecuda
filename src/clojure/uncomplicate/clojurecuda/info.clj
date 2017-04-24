@@ -16,7 +16,8 @@
              [constants :refer :all]
              [utils :refer [with-check maybe]]])
   (:import jcuda.Pointer
-           [jcuda.driver JCudaDriver CUdevice CUdevice_attribute CUcontext CUlimit]))
+           [jcuda.driver JCudaDriver CUdevice CUdevice_attribute CUcontext CUlimit CUstream
+            CUfunction CUfunction_attribute]))
 
 ;; =================== Info* utility macros ===============================
 
@@ -494,7 +495,7 @@
   "
   []
   (let [res (int-array 1)]
-    (dec-func-cache (with-check (JCudaDriver/cuCtxGetCacheConfig res) (aget res 0)))))
+    (dec-func-cache-config (with-check (JCudaDriver/cuCtxGetCacheConfig res) (aget res 0)))))
 
 (defn limit*
   "Returns or sets resource limits for the attribute specified by integer `limit`.
@@ -537,31 +538,40 @@
     (with-check (JCudaDriver/cuCtxGetDevice res) res)))
 
 (defn shared-config*
-  "Sets or gets the current shared memory configuration for the current context.
+  "Sets or gets the current shared memory configuration for the current context or kernel `func`.
 
   See [cuCtxGetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   See [cuCtxSetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  See [cuFuncSetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EXEC.html)
   "
   (^long []
    (let [res (int-array 1)]
      (with-check (JCudaDriver/cuCtxGetSharedMemConfig res) (aget res 0))))
   (^long [^long config]
-   (with-check (JCudaDriver/cuCtxSetSharedMemConfig config) config)))
+   (with-check (JCudaDriver/cuCtxSetSharedMemConfig config) config))
+  ([func ^long config]
+   (with-check (JCudaDriver/cuFuncSetSharedMemConfig func config) func)))
 
 (defn shared-config
   "Gets the current shared memory configuration for the current context.
 
-  See [cuCtxGetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)"
+  See [cuCtxGetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  "
   []
   (dec-shared-config (shared-config*)))
 
 (defn shared-config!
   "Sets the current shared memory configuration for the current context.
 
-  See [cuCtxSetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)"
-  [config]
-  (shared-config* (or (ctx-shared-config config)
-                      (ex-info "Unknown config." {:config config :available ctx-shared-config}))))
+  See [cuCtxSetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  See [cuFuncSetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EXEC.html)
+  "
+  ([config]
+   (shared-config* (or (shared-config-map config)
+                       (ex-info "Unknown config." {:config config :available shared-config-map}))))
+  ([func config]
+   (shared-config* func (or (shared-config-map config)
+                            (ex-info "Unknown config." {:config config :available shared-config-map})))))
 
 (defn stream-priority-range
   "Returns a vector of 2 numerical values that correspond to the least and greatest stream priorities.
@@ -609,3 +619,98 @@
         nil)))
     ([ctx]
      {:api-version (maybe (api-version ctx))})))
+
+;; =========================== Stream Management ================================
+
+(defn stream-flag [hstream]
+  (let [res (int-array 1)]
+    (with-check (JCudaDriver/cuStreamGetFlags hstream res) (aget ^ints res 0))))
+
+(defn stream-priority ^long [hstream]
+  (let [res (int-array 1)]
+    (with-check (JCudaDriver/cuStreamGetPriority hstream res) (aget ^ints res 0))))
+
+(extend-type CUstream
+  Info
+  (info
+    ([hstream info-type]
+     (maybe
+      (case info-type
+        :flag (dec-stream-flag (stream-flag hstream))
+        :priority (stream-priority hstream)
+        nil)))
+    ([hstream]
+     {:flag (maybe (dec-stream-flag (stream-flag hstream)))
+      :priority (maybe (stream-priority hstream))})))
+
+;; ============================= Execution Management ==========================
+
+(defn max-threads-per-block ^long [^CUfunction function]
+  (info-attribute* JCudaDriver/cuFuncGetAttribute function
+                   CUfunction_attribute/CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK))
+
+(defn shared-size ^long [^CUfunction function]
+  (info-attribute* JCudaDriver/cuFuncGetAttribute function
+                   CUfunction_attribute/CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES))
+
+(defn const-size ^long [^CUfunction function]
+  (info-attribute* JCudaDriver/cuFuncGetAttribute function
+                   CUfunction_attribute/CU_FUNC_ATTRIBUTE_CONST_SIZE_BYTES))
+
+(defn local-size ^long [^CUfunction function]
+  (info-attribute* JCudaDriver/cuFuncGetAttribute function
+                   CUfunction_attribute/CU_FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES))
+
+(defn num-regs ^long [^CUfunction function]
+  (info-attribute* JCudaDriver/cuFuncGetAttribute function
+                   CUfunction_attribute/CU_FUNC_ATTRIBUTE_NUM_REGS))
+
+(defn ptx-version ^long [^CUfunction function]
+  (info-attribute* JCudaDriver/cuFuncGetAttribute function
+                   CUfunction_attribute/CU_FUNC_ATTRIBUTE_PTX_VERSION))
+
+(defn binary-version ^long [^CUfunction function]
+  (info-attribute* JCudaDriver/cuFuncGetAttribute function
+                   CUfunction_attribute/CU_FUNC_ATTRIBUTE_BINARY_VERSION))
+(defn cache-config*
+  "Sets the preferred cache configuration for a device function `fun`, as an integer `config`.
+
+  See [cuFuncSetCacheConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EXEC.html)
+  "
+  [fun ^long config]
+  (with-check (JCudaDriver/cuFuncSetCacheConfig fun config) fun))
+
+(defn cache-config!
+  "Sets the preferred cache configuration for a device function `fun`, as a keyword `config`.
+
+  Available configs are `:prefer-none`, `:prefer-shared`, `:prefer-L1`, and `:prefer-equal`.
+
+  See [cuFuncSetCacheConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EXEC.html)
+  "
+  [fun config]
+  (cache-config* fun (or (func-cache-config config)
+                         (throw (ex-info "Invaling cache config."
+                                         {:config config :available func-cache-config})))))
+
+(extend-type CUfunction
+  Info
+  (info
+    ([fun info-type]
+     (maybe
+      (case info-type
+        :max-threads-per-block (max-threads-per-block fun)
+        :shared-size (shared-size fun)
+        :const-size (const-size fun)
+        :local-size (local-size fun)
+        :num-regs (num-regs fun)
+        :ptx-version (ptx-version fun)
+        :binary-version (binary-version fun)
+        nil)))
+    ([fun]
+     {:max-threads-per-block (maybe (max-threads-per-block fun))
+      :shared-size (maybe (shared-size fun))
+      :const-size (maybe (const-size fun))
+      :local-size (maybe (local-size fun))
+      :num-regs (maybe (num-regs fun))
+      :ptx-version (maybe (ptx-version fun))
+      :binary-version (maybe (binary-version fun))})))

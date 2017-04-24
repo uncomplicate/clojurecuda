@@ -10,13 +10,12 @@
     uncomplicate.clojurecuda.constants
   "Defines constants and mappings from/to CUDA constants."
   (:import [jcuda.driver CUctx_flags JCudaDriver CUdevice_attribute CUcomputemode CUmemAttach_flags
-            CUfunc_cache CUdevice_P2PAttribute CUlimit CUsharedconfig]))
+            CUfunc_cache CUdevice_P2PAttribute CUlimit CUsharedconfig CUstream_flags CUevent_flags]))
 
 ;; ==================== Keyword mapping ======================================
 
 (def ^{:const true
-       :doc "Available context flags defined in the CUDA standard.
-See [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)."}
+       :doc "Available context flags defined in the CUDA standard."}
   ctx-flags
   {:sched-auto CUctx_flags/CU_CTX_SCHED_AUTO
    :sched-spin CUctx_flags/CU_CTX_SCHED_SPIN
@@ -26,8 +25,7 @@ See [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.h
    :lmem-resize-to-max CUctx_flags/CU_CTX_LMEM_RESIZE_TO_MAX})
 
 (def ^{:const true
-       :doc "Available context limits.
-See [cuCtxGetLimit](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)."}
+       :doc "Available context limits."}
   ctx-limits
   {:stack-size CUlimit/CU_LIMIT_STACK_SIZE
    :malloc-heap-size CUlimit/CU_LIMIT_MALLOC_HEAP_SIZE
@@ -36,9 +34,8 @@ See [cuCtxGetLimit](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX
    :dev-runtime-pending-launch-count CUlimit/CU_LIMIT_DEV_RUNTIME_PENDING_LAUNCH_COUNT})
 
 (def ^{:const true
-       :doc "Available shared memory configurations.
-See [cuCtxGetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)."}
-  ctx-shared-config
+       :doc "Available shared memory configurations."}
+  shared-config-map
   {:default-bank-size CUsharedconfig/CU_SHARED_MEM_CONFIG_DEFAULT_BANK_SIZE
    :four-byte-bank-size CUsharedconfig/CU_SHARED_MEM_CONFIG_FOUR_BYTE_BANK_SIZE
    :eight-byte-bank-size CUsharedconfig/CU_SHARED_MEM_CONFIG_EIGHT_BYTE_BANK_SIZE})
@@ -50,17 +47,8 @@ See [cuCtxGetSharedMemConfig](http://docs.nvidia.com/cuda/cuda-driver-api/group_
     2 :eight-byte-bank-size
     config))
 
-(defn dec-func-cache [^long mode]
-  (case mode
-    3 :prefer-equal
-    2 :prefer-L1
-    0 :prefer-none
-    1 :prefer-shared
-    mode))
-
 (def ^{:const true
-       :doc "Available device P2P attributes.
-See [CUdevice_P2PAttribute](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TYPES.html)."}
+       :doc "Available device P2P attributes."}
   p2p-attributes
   {:performance-rank CUdevice_P2PAttribute/CU_DEVICE_P2P_ATTRIBUTE_PERFORMANCE_RANK
    :access-supported CUdevice_P2PAttribute/CU_DEVICE_P2P_ATTRIBUTE_ACCESS_SUPPORTED
@@ -75,23 +63,56 @@ See [CUdevice_P2PAttribute](http://docs.nvidia.com/cuda/cuda-driver-api/group__C
     mode) )
 
 (def ^{:const true
-       :doc "Available flags for the [[core/mem-host-alloc]] function.
-See [cuCtxMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)."}
+       :doc "Available flags for the [[core/mem-host-alloc]] function."}
   mem-host-alloc-flags
   {:portable JCudaDriver/CU_MEMHOSTALLOC_PORTABLE
    :devicemap JCudaDriver/CU_MEMHOSTALLOC_DEVICEMAP
    :writecombined JCudaDriver/CU_MEMHOSTALLOC_WRITECOMBINED})
 
 (def ^{:const true
-       :doc "Available flags for the [[core/mem-host-register]] function.
-See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)."}
+       :doc "Available flags for the [[core/mem-host-register]] function."}
   mem-host-register-flags
   {:portable JCudaDriver/CU_MEMHOSTREGISTER_PORTABLE
    :devicemap JCudaDriver/CU_MEMHOSTREGISTER_DEVICEMAP})
 
 (def ^{:const true
-       :doc "Available flags for the [[core/mem-host-attach]] function.
-See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)."}
+       :doc "Available flags for the [[core/mem-host-attach]] function."}
   mem-attach-flags
   {:global CUmemAttach_flags/CU_MEM_ATTACH_GLOBAL
    :host CUmemAttach_flags/CU_MEM_ATTACH_HOST})
+
+(def ^{:const true
+       :doc "Available flags for the [[core/mem-host-attach]] function."}
+  stream-flags
+  {:default CUstream_flags/CU_STREAM_DEFAULT
+   :non-blocking CUstream_flags/CU_STREAM_NON_BLOCKING})
+
+(defn dec-stream-flag [^long flag]
+  (case flag
+    0 :default
+    1 :non-blocking
+    flag))
+
+(def ^{:const true
+       :doc "Available flags for the [[core/event]] function."}
+  event-flags
+  {:default CUevent_flags/CU_EVENT_DEFAULT
+   :blocking-sync CUevent_flags/CU_EVENT_BLOCKING_SYNC
+   :disable-timing CUevent_flags/CU_EVENT_DISABLE_TIMING
+   :interprocess CUevent_flags/CU_EVENT_INTERPROCESS})
+
+(def ^{:const true
+       :doc "Available config for the [[core/cache-config!]] function."}
+  func-cache-config
+  {:prefer-none CUfunc_cache/CU_FUNC_CACHE_PREFER_NONE
+   :prefer-shared CUfunc_cache/CU_FUNC_CACHE_PREFER_SHARED
+   :prefer-L1 CUfunc_cache/CU_FUNC_CACHE_PREFER_L1
+   :prefer-equal CUfunc_cache/CU_FUNC_CACHE_PREFER_EQUAL})
+
+(defn dec-func-cache-config [^long mode]
+  (case mode
+    3 :prefer-equal
+    2 :prefer-L1
+    0 :prefer-none
+    1 :prefer-shared
+    mode))

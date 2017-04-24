@@ -11,7 +11,9 @@
             [uncomplicate.commons.core :refer [release with-release]]
             [uncomplicate.clojurecuda
              [core :refer :all]
-             [info :refer :all]])
+             [constants :refer [stream-flags]]
+             [info :refer :all]
+             [nvrtc :refer [compile! program]]])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 
@@ -30,3 +32,20 @@
    (limit! :stack-size 512) => 512
    (limit :stack-size) => 512
    (count (context-info)) => 10))
+
+(with-context (context (device))
+  (with-release [hstream (stream :non-blocking)]
+    (facts
+     "Stream info tests."
+     (count (info hstream)) => 2
+     (stream-flag hstream) => (stream-flags :non-blocking)
+     (:flag (info hstream))))) => :non-blocking
+
+(let [program-source (slurp "test/cuda/test.cu")]
+  (with-context (context (device))
+    (with-release [prog (compile! (program program-source))
+                   modl (module prog)
+                   fun (function modl "inc")]
+      (facts
+       "function info tests."
+       (count (info fun)) => 7))))
