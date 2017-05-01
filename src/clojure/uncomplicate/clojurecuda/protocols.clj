@@ -27,3 +27,11 @@
 (defprotocol ModuleLoad
   (module-load [data m])
   (module-load-jit [data m options]))
+
+(defprotocol Contextual
+  "An object that has some dependency on a `CUcontext`."
+  (cu-context [this]
+    "Context that is related to this object."))
+
+(defprotocol WithOffset
+  (with-offset [this ofst]))

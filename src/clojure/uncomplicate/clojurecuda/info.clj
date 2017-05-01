@@ -672,6 +672,7 @@
 (defn binary-version ^long [^CUfunction function]
   (info-attribute* JCudaDriver/cuFuncGetAttribute function
                    CUfunction_attribute/CU_FUNC_ATTRIBUTE_BINARY_VERSION))
+
 (defn cache-config*
   "Sets the preferred cache configuration for a device function `fun`, as an integer `config`.
 

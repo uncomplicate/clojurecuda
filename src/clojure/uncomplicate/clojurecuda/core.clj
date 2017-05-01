@@ -40,10 +40,18 @@
   (release [c]
     (with-check (JCudaDriver/cuCtxDestroy c) true)))
 
+(extend-type Pointer
+  WithOffset
+  (with-offset [cu byte-offset]
+   (.withByteOffset cu byte-offset)))
+
 (extend-type CUdeviceptr
   Releaseable
   (release [dp]
-    (with-check (JCudaDriver/cuMemFree dp) true)))
+    (with-check (JCudaDriver/cuMemFree dp) true))
+  WithOffset
+  (with-offset [cu byte-offset]
+   (.withByteOffset cu byte-offset)))
 
 (extend-type CUmodule
   Releaseable
@@ -174,7 +182,9 @@
   See [cuMemcpyXtoY](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([src dst ^long byte-count hstream]
-   (memcpy-host* src dst byte-count hstream))
+   (if hstream
+     (memcpy-host* src dst byte-count hstream)
+     (memcpy-host* src dst byte-count)))
   ([src dst arg]
    (if (integer? arg)
      (memcpy-host* src dst arg)
@@ -195,7 +205,9 @@
      (with-check (JCudaDriver/cuMemsetD32 (cu-ptr cu-mem) value arg) cu-mem)
      (memset! cu-mem value (/ (long (size cu-mem)) Integer/BYTES) arg)))
   ([cu-mem ^long value ^long len hstream]
-   (with-check (JCudaDriver/cuMemsetD32Async (cu-ptr cu-mem) value len hstream) cu-mem)))
+   (if hstream
+     (with-check (JCudaDriver/cuMemsetD32Async (cu-ptr cu-mem) value len hstream) cu-mem)
+     (memset! cu-mem value len))))
 
 ;; ==================== Linear memory ================================================
 
@@ -225,7 +237,7 @@
    (cu-linear-memory cu size false)))
 
 (defn mem-alloc
-  "Allocates the `size` bytes of memory on the device. Returns a [[CULinearmemory]] object.
+  "Allocates the `size` bytes of memory on the device. Returns a [[CULinearMemory]] object.
 
   The memory is not cleared. `size` must be greater than `0`.
 
@@ -252,7 +264,7 @@
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
   system, specified by a keyword `flag`.
 
-  Returns a [[CULinearmemory]] object.
+  Returns a [[CULinearMemory]] object.
   Valid flags are: `:global`, `:host` and `:single` (the default).
   The memory is not cleared. `size` must be greater than `0`.
 
@@ -373,6 +385,7 @@
    (mem-host-register* memory 0)))
 
 ;; =============== Host memory  =================================
+
 (extend-type Float
   Mem
   (ptr [this]
@@ -546,27 +559,27 @@
 (defn grid-1d
   "Creates a 1-dimensional [[GridDim]] record with grid and block dimensions x."
   ([^long grid-x]
-   (GridDim. grid-x 1 1 256 1 1))
+   (GridDim. grid-x 1 1 (min grid-x 256) 1 1))
   ([^long grid-x ^long block-x]
-   (GridDim. grid-x 1 1 block-x 1 1)))
+   (GridDim. grid-x 1 1 (min grid-x block-x) 1 1)))
 
 (defn grid-2d
   "Creates a 2-dimensional [[GridDim]] record with grid and block dimensions x and y."
   ([^long grid-x ^long grid-y]
-   (GridDim. grid-x grid-y 1 256 1 1))
+   (GridDim. grid-x grid-y 1 (min grid-x 256) 1 1))
   ([^long grid-x ^long grid-y ^long block-x]
-   (GridDim. grid-x grid-y 1 block-x 1 1))
+   (GridDim. grid-x grid-y 1 (min grid-x block-x) 1 1))
   ([^long grid-x ^long grid-y ^long block-x ^long block-y]
-   (GridDim. grid-x grid-y 1 block-x block-y 1)))
+   (GridDim. grid-x grid-y 1 (min grid-x block-x) (min grid-y block-y) 1)))
 
 (defn grid-3d
   "Creates a 3-dimensional [[GridDim]] record with grid and block dimensions x, y, and z."
   ([^long grid-x ^long grid-y ^long grid-z]
-   (GridDim. grid-x grid-y grid-z 256 1 1))
+   (GridDim. grid-x grid-y grid-z (min grid-x 256) 1 1))
   ([^long grid-x ^long grid-y ^long grid-z ^long block-x]
-   (GridDim. grid-x grid-y grid-z block-x 1 1))
+   (GridDim. grid-x grid-y grid-z (min grid-x block-x) 1 1))
   ([grid-x grid-y grid-z block-x block-y block-z]
-   (GridDim. grid-x grid-y grid-z block-x block-y block-z)))
+   (GridDim. grid-x grid-y grid-z (min grid-x block-x) (min grid-y block-y) (min grid-z block-z))))
 
 (defn global
   "Returns CUDA global `CULinearMemory` named `name` from module `m`, with optionally specified size..
@@ -582,7 +595,7 @@
 
 (defn parameters
   "Creates a `Pointer` to an array of `Pointer`s to CUDA `params`. `params` can be any object on
-  device ([[CULinearmemory]] for example), or host (arrays, numbers) that makes sense as a kernel
+  device ([[CULinearMemory]] for example), or host (arrays, numbers) that makes sense as a kernel
   parameter per CUDA specification. Use the result as an argument in [[launch!]].
   "
   [& params]

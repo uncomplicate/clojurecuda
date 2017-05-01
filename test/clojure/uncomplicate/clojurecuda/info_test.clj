@@ -17,6 +17,8 @@
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 
+(init)
+
 (facts
  "Driver info tests."
  (pos? (driver-version)) => true)
