@@ -7,7 +7,7 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns uncomplicate.clojurecuda.toolbox-test
-  (:require [midje.sweet :refer [facts =>]]
+  (:require [midje.sweet :refer [facts => roughly]]
             [uncomplicate.commons.core :refer [release with-release]]
             [uncomplicate.clojurecuda
              [core :refer :all]
@@ -18,21 +18,21 @@
 
 (init)
 
-(let [program-source (str (slurp "src/cuda/kernels/reduction.cu") "\n"
+(let [program-source (str (slurp "src/cuda/uncomplicate/clojurecuda/kernels/reduction.cu") "\n"
                           (slurp "test/cuda/kernels/sum.cu"))
-      cnt 2000]
+      cnt (- (long (Math/pow 2 13)) 7)]
 
   (with-context (context (device))
-    (with-release [prog (compile! (program program-source) ["-DREAL=float"])
+    (with-release [prog (compile! (program program-source)
+                                  ["-DREAL=float" "-DACCUMULATOR=double" "-arch=compute_30"])
                    m (module prog)
                    sum-reduction (function m "sum_reduction")
                    sum (function m "sum")
                    host-x (float-array (range cnt))
                    gpu-x (mem-alloc (* Float/BYTES cnt))
-                   gpu-acc (mem-alloc (* Float/BYTES (count-blocks 1024 cnt)))]
+                   gpu-acc (mem-alloc (* Double/BYTES (count-blocks 1024 cnt)))]
       (facts
        "Simple sum reduction."
        (memcpy-host! host-x gpu-x)
-       (launch-reduce! nil sum sum-reduction
-                       (parameters cnt gpu-x gpu-acc) (parameters cnt gpu-acc) cnt 1024 )
-       (seq (memcpy-host! gpu-acc (float-array 1))) => [(double (apply + (range 2000)))]))))
+       (launch-reduce! nil sum sum-reduction [gpu-x gpu-acc] [gpu-acc] cnt 1024)
+       (first (memcpy-host! gpu-acc (double-array 1))) => (double (apply + (range cnt)))))))

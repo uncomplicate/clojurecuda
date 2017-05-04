@@ -1,9 +1,13 @@
 extern "C" {
 
-#ifndef ACCUMULATOR
-#define ACCUMULATOR double
+#ifndef REAL
+#define REAL float
 #endif
-
+    
+#ifndef ACCUMULATOR
+#define ACCUMULATOR REAL
+#endif
+    
 #ifndef BLOCKS
 #define BLOCKS 1024
 #endif
@@ -45,7 +49,7 @@ extern "C" {
         return lacc[0];
     }
 
-    __device__ ACCUMULATOR block_reduction_sum_row (const REAL value) {
+    __device__ ACCUMULATOR block_reduction_sum_row (const ACCUMULATOR value) {
 
         int local_row = threadIdx.x;
         int local_col = threadIdx.y;
@@ -75,7 +79,7 @@ extern "C" {
 
     }
 
-    __device__ ACCUMULATOR block_reduction_sum_col (const REAL value) {
+    __device__ ACCUMULATOR block_reduction_sum_col (const ACCUMULATOR value) {
 
         int local_row = threadIdx.y;
         int local_col = threadIdx.x;
@@ -103,6 +107,14 @@ extern "C" {
 
         return lacc[local_row];
 
+    }
+
+    __global__ void sum_reduction(int n, ACCUMULATOR* acc) {
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
+        ACCUMULATOR sum = block_reduction_sum( (i < n) ? acc[i] : 0.0);
+        if (threadIdx.x == 0) {
+            acc[blockIdx.x] = sum;
+        }
     }
 
 }

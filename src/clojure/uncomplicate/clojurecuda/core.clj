@@ -51,7 +51,7 @@
     (with-check (JCudaDriver/cuMemFree dp) true))
   WithOffset
   (with-offset [cu byte-offset]
-   (.withByteOffset cu byte-offset)))
+   (.withByteOffset ^CUdeviceptr cu ^long byte-offset)))
 
 (extend-type CUmodule
   Releaseable
@@ -557,29 +557,33 @@
 (defrecord GridDim [^long grid-x ^long grid-y ^long grid-z ^long block-x ^long block-y ^long block-z])
 
 (defn grid-1d
-  "Creates a 1-dimensional [[GridDim]] record with grid and block dimensions x."
-  ([^long grid-x]
-   (GridDim. grid-x 1 1 (min grid-x 256) 1 1))
-  ([^long grid-x ^long block-x]
-   (GridDim. grid-x 1 1 (min grid-x block-x) 1 1)))
+  "Creates a 1-dimensional [[GridDim]] record with grid and block dimensions x.
+  Note: dim-x is the total number of threads globally, not the number of blocks."
+  ([^long dim-x]
+   (GridDim. (Math/ceil (/ dim-x 1024)) 1 1 1024 1 1))
+  ([^long dim-x ^long block-x]
+   (GridDim. (Math/ceil (/ dim-x block-x)) 1 1 block-x 1 1)))
 
 (defn grid-2d
-  "Creates a 2-dimensional [[GridDim]] record with grid and block dimensions x and y."
-  ([^long grid-x ^long grid-y]
-   (GridDim. grid-x grid-y 1 (min grid-x 256) 1 1))
-  ([^long grid-x ^long grid-y ^long block-x]
-   (GridDim. grid-x grid-y 1 (min grid-x block-x) 1 1))
-  ([^long grid-x ^long grid-y ^long block-x ^long block-y]
-   (GridDim. grid-x grid-y 1 (min grid-x block-x) (min grid-y block-y) 1)))
+  "Creates a 2-dimensional [[GridDim]] record with grid and block dimensions x and y.
+  Note: dim-x is the total number of threads globally, not the number of blocks."
+  ([^long dim-x ^long dim-y]
+   (GridDim. (Math/ceil (/ dim-x 1024)) dim-y 1 1024 1 1))
+  ([^long dim-x ^long dim-y ^long block-x]
+   (GridDim. (Math/ceil (/ dim-x block-x)) dim-y 1 block-x 1 1))
+  ([^long dim-x ^long dim-y ^long block-x ^long block-y]
+   (GridDim. (Math/ceil (/ dim-x block-x)) (Math/ceil (/ dim-y block-y)) 1 block-x block-y 1)))
 
 (defn grid-3d
-  "Creates a 3-dimensional [[GridDim]] record with grid and block dimensions x, y, and z."
-  ([^long grid-x ^long grid-y ^long grid-z]
-   (GridDim. grid-x grid-y grid-z (min grid-x 256) 1 1))
-  ([^long grid-x ^long grid-y ^long grid-z ^long block-x]
-   (GridDim. grid-x grid-y grid-z (min grid-x block-x) 1 1))
-  ([grid-x grid-y grid-z block-x block-y block-z]
-   (GridDim. grid-x grid-y grid-z (min grid-x block-x) (min grid-y block-y) (min grid-z block-z))))
+  "Creates a 3-dimensional [[GridDim]] record with grid and block dimensions x, y, and z.
+  Note: dim-x is the total number of threads globally, not the number of blocks."
+  ([^long dim-x ^long dim-y ^long dim-z]
+   (GridDim. (Math/ceil (/ dim-x 1024)) dim-y dim-z 1024 1 1))
+  ([^long dim-x ^long dim-y ^long dim-z ^long block-x]
+   (GridDim. (Math/ceil (/ dim-x block-x)) dim-y dim-z block-x 1 1))
+  ([dim-x dim-y dim-z block-x block-y block-z]
+   (GridDim. (Math/ceil (/ (long dim-x) (long block-x))) (Math/ceil (/ (long dim-y) (long block-y)))
+             (Math/ceil (/ (long dim-z) (long block-z))) block-x block-y block-z)))
 
 (defn global
   "Returns CUDA global `CULinearMemory` named `name` from module `m`, with optionally specified size..
