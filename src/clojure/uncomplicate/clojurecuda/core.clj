@@ -665,6 +665,10 @@
    (stream* priority (or (stream-flags flag)
                          (throw (ex-info "Invaling stream flag." {:flag flag :available stream-flags}))))))
 
+(def ^{:constant true
+       :doc "The default per-thread stream"}
+  default-stream JCudaDriver/CU_STREAM_PER_THREAD)
+
 (defn ready?
   "Determine status (ready or not) of a compute stream or event.
 
