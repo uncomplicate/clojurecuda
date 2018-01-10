@@ -13,24 +13,25 @@
         :url "https://github.com/uncomplicate/clojurecuda"}
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.8.0"]
+  :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.jcuda/jcuda "0.9.0"]
                  [org.clojure/core.async "0.3.465"]
-                 [uncomplicate/commons "0.3.1"]
-                 [uncomplicate/fluokitten "0.6.0"]]
+                 [uncomplicate/commons "0.4.0-SNAPSHOT"]
+                 [uncomplicate/fluokitten "0.6.1-SNAPSHOT"]]
 
   :codox {:metadata {:doc/format :markdown}
           :src-dir-uri "http://github.com/uncomplicate/clojurecuda/blob/master/"
           :src-linenum-anchor-prefix "L"
           :output-path "docs/codox"}
 
-  :profiles {:dev {:plugins [[lein-midje "3.2"]
-                             [lein-codox "0.10.1"]]
+  :profiles {:dev {:plugins [[lein-midje "3.2.1"]
+                             [lein-codox "0.10.3"]]
                    :global-vars {*warn-on-reflection* true
                                  *assert* true
                                  *unchecked-math* :warn-on-boxed
                                  *print-length* 128}
-                   :dependencies [[midje "1.8.3"]]}}
+                   :dependencies [[midje "1.9.0"]]
+                   :jvm-opts ^:replace ["--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"]}}
 
   :javac-options ["-target" "1.8" "-source" "1.8" "-Xlint:-options"]
   :source-paths ["src/clojure" "src/cuda"]

@@ -106,7 +106,7 @@
 (defn context
   "Creates a CUDA context on the `device` using a keyword `flag`.
 
-  Valid flags are: `:sched-aulto`, `:sched-spin`, `:sched-yield`, `:sched-blocking-sync`,
+  Valid flags are: `:sched-auto`, `:sched-spin`, `:sched-yield`, `:sched-blocking-sync`,
   `:map-host`, `:lmem-resize-to-max`. The default is none.
   Must be released after use.
 
