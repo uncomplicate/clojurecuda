@@ -23,7 +23,7 @@
              [utils :refer [with-check]]]
             [clojure.string :as str]
             [clojure.core.async :refer [go >!]])
-  (:import [jcuda Pointer NativePointerObject]
+  (:import [jcuda Pointer NativePointerObject JCudaAccessor]
            [jcuda.driver JCudaDriver CUdevice CUcontext CUdeviceptr CUmemAttach_flags CUmodule
             CUfunction CUstream CUstream_flags CUresult CUstreamCallback CUevent CUevent_flags]
            [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]
@@ -72,6 +72,9 @@
   "Initializes the CUDA driver."
   []
   (with-check (JCudaDriver/cuInit 0) true))
+
+(defn null-pointer? [npo]
+  (JCudaAccessor/isNullPointer npo))
 
 ;; ================== Device Management ====================================
 
