@@ -175,7 +175,7 @@
   ([src dst ^long byte-count]
    (with-check (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) byte-count) dst))
   ([src dst]
-   (memcpy! src dst (min (long (size src)) (long (size dst))))))
+   (memcpy! src dst (min ^long (size src) ^long (size dst)))))
 
 (defn memcpy-host!
   "Copies `byte-count` or all possible memory from `src` to `dst`, one of which
@@ -191,9 +191,9 @@
   ([src dst arg]
    (if (integer? arg)
      (memcpy-host* src dst arg)
-     (memcpy-host* src dst (min (long (size src)) (long (size dst))) arg)))
+     (memcpy-host* src dst (min ^long (size src) ^long (size dst)) arg)))
   ([src dst]
-   (memcpy-host* src dst (min (long (size src)) (long (size dst))))))
+   (memcpy-host* src dst (min ^long (size src) ^long (size dst)))))
 
 (defn memset!
   "Sets `len` or all 32-bit segments of `cu-mem` to 32-bit integer `value`. If `hstream` is
@@ -202,11 +202,11 @@
   See [cuMemset32D](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([cu-mem ^long value]
-   (memset! cu-mem value (long (/ (long (size cu-mem)) Integer/BYTES))))
+   (memset! cu-mem value ^long (/ ^long (size cu-mem) Integer/BYTES)))
   ([cu-mem ^long value arg]
    (if (integer? arg)
      (with-check (JCudaDriver/cuMemsetD32 (cu-ptr cu-mem) value arg) cu-mem)
-     (memset! cu-mem value (/ (long (size cu-mem)) Integer/BYTES) arg)))
+     (memset! cu-mem value (/ ^long (size cu-mem) Integer/BYTES) arg)))
   ([cu-mem ^long value ^long len hstream]
    (if hstream
      (with-check (JCudaDriver/cuMemsetD32Async (cu-ptr cu-mem) value len hstream) cu-mem)
@@ -585,8 +585,8 @@
   ([^long dim-x ^long dim-y ^long dim-z ^long block-x]
    (GridDim. (Math/ceil (/ dim-x block-x)) dim-y dim-z block-x 1 1))
   ([dim-x dim-y dim-z block-x block-y block-z]
-   (GridDim. (Math/ceil (/ (long dim-x) (long block-x))) (Math/ceil (/ (long dim-y) (long block-y)))
-             (Math/ceil (/ (long dim-z) (long block-z))) block-x block-y block-z)))
+   (GridDim. (Math/ceil (/ ^long dim-x ^long block-x)) (Math/ceil (/ ^long dim-y ^long block-y))
+             (Math/ceil (/ ^long dim-z ^long block-z)) block-x block-y block-z)))
 
 (defn global
   "Returns CUDA global `CULinearMemory` named `name` from module `m`, with optionally specified size..

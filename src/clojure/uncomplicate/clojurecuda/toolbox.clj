@@ -33,8 +33,8 @@
    (let [[m n block-m block-n] (if (and wgs-m wgs-n)
                                  [n (count-blocks block-m m) wgs-m wgs-n]
                                  [m (count-blocks block-n n) block-m block-n])]
-     (if (or (< 1 (long block-n)) (= 1 (long n)))
-       (loop [n (long n)]
+     (if (or (< 1 ^long block-n) (= 1 ^long n))
+       (loop [n ^long n]
          (when (< 1 n)
            (launch! reduction-kernel (grid-2d m n block-m block-n) hstream
                     (apply parameters n reduction-params))
