@@ -42,22 +42,42 @@
        (throw (IllegalArgumentException.
                (format "block-n %d would cause infinite recursion for n:%d." block-n n)))))))
 
-(defn read-int ^long [cu-buf]
-  (let [res (int-array 1)]
-    (memcpy-host! cu-buf res)
-    (aget res 0)))
+(defn read-int
+  (^long [cu-buf]
+   (let [res (int-array 1)]
+     (memcpy-host! cu-buf res)
+     (aget res 0)))
+  (^long [cu-buf hstream]
+   (let [res (int-array 1)]
+     (memcpy-host! cu-buf res hstream)
+     (aget res 0))))
 
-(defn read-long ^long [cu-buf]
-  (let [res (long-array 1)]
-    (memcpy-host! cu-buf res)
-    (aget res 0)))
+(defn read-long
+  (^long [cu-buf]
+   (let [res (long-array 1)]
+     (memcpy-host! cu-buf res)
+     (aget res 0)))
+  (^long [cu-buf hstream]
+   (let [res (long-array 1)]
+     (memcpy-host! cu-buf res hstream)
+     (aget res 0))))
 
-(defn read-double ^double [cu-buf]
-  (let [res (double-array 1)]
-    (memcpy-host! cu-buf res)
-    (aget res 0)))
+(defn read-double
+  (^double [cu-buf]
+   (let [res (double-array 1)]
+     (memcpy-host! cu-buf res)
+     (aget res 0)))
+  (^double [cu-buf hstream]
+   (let [res (double-array 1)]
+     (memcpy-host! cu-buf res hstream)
+     (aget res 0))))
 
-(defn read-float ^double [cu-buf]
-  (let [res (float-array 1)]
-    (memcpy-host! cu-buf res)
-    (aget res 0)))
+(defn read-float
+  (^double [cu-buf]
+   (let [res (float-array 1)]
+     (memcpy-host! cu-buf res)
+     (aget res 0)))
+  (^double [cu-buf hstream]
+   (let [res (float-array 1)]
+     (memcpy-host! cu-buf res hstream)
+     (aget res 0))))
