@@ -29,10 +29,6 @@
            [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]
            [java.nio ByteBuffer ByteOrder]))
 
-(def ^{:dynamic true
-       :doc "Dynamic var for binding the default context."}
-  *context*)
-
 ;; ==================== Release resources =======================
 
 (extend-type CUcontext
@@ -121,17 +117,6 @@
   ([dev]
    (context* dev 0)))
 
-(defmacro with-context
-  "Dynamically binds `context` to the default context [[*context*]], and evaluates the body with
-  the binding. Releases the context in the `finally` block.
-
-  Take care *not* to release that context again in some other place; JVM might crash.
-  "
-  [context & body]
-  `(binding [*context* ~context]
-     (try ~@body
-          (finally (release *context*)))))
-
 (defn current-context
   "Returns the CUDA context bound to the calling CPU thread.
 
@@ -165,6 +150,27 @@
   "
   [ctx]
   (with-check (JCudaDriver/cuCtxPushCurrent ctx) ctx))
+
+(defmacro in-context
+  "Pushes the `ctx` to the top of the context stack, evaluates the body with `ctx` as the current context,
+  and pops the context from the stack.
+  Does NOT release the context.
+  "
+  [ctx & body]
+  `(do
+     (push-context! ~ctx)
+     (try
+       ~@body
+       (finally (pop-context!)))))
+
+(defmacro with-context
+  "Pushes the `context` to the top of the context stack, evaluates the body, and pops the context from the stack.
+  Releases the context. Be careful! If you try to release a previously released context, JVM might crash!
+  "
+  [ctx & body]
+  `(try
+     (in-context ~ctx ~@body)
+     (finally (release ~ctx))))
 
 ;; ================== Memory Management  ==============================================
 
@@ -802,7 +808,7 @@
    (let [res (int-array 1)]
      (with-check (JCudaDriver/cuCtxDisablePeerAccess ctx) ctx)))
   ([]
-   (disable-peer-access! *context*)))
+   (disable-peer-access! (current-context))))
 
 (defn enable-peer-access!
   "Enables direct access to memory allocations in a peer context and unregisters any registered allocations.
@@ -813,4 +819,4 @@
    (let [res (int-array 1)]
      (with-check (JCudaDriver/cuCtxEnablePeerAccess ctx 0) ctx)))
   ([]
-   (enable-peer-access! *context*)))
+   (enable-peer-access! (current-context))))

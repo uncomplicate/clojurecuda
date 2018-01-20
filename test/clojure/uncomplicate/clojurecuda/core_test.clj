@@ -36,16 +36,19 @@
 
 (facts
  "Context tests"
- (let [dev (device 0)
-       ctx (context* dev 0)]
-   ctx => truthy
-   (release ctx) => true
-   (context dev :unknown) => (throws ExceptionInfo)
-   (with-context (context dev :sched-blocking-sync)
-     *context* => truthy
-     (current-context) => *context*
-     (current-context! ctx) => ctx
-     (current-context) => ctx)))
+ (let [dev (device 0)]
+   (let [ctx (context* dev 0)]
+     ctx => truthy
+     (release ctx) => true
+     (context dev :unknown) => (throws ExceptionInfo))
+   (let [ctx1 (context dev :sched-blocking-sync)
+         ctx2 (context dev :sched-blocking-sync)]
+     (with-context ctx1
+       (with-context ctx2
+         (current-context) => ctx2
+         (do (pop-context!) (current-context)) => ctx1
+         (current-context! ctx2) => ctx2
+         (current-context) => ctx2)))))
 
 ;; =============== Module Management & Execution Control Tests =====================================
 
@@ -53,30 +56,30 @@
       cnt 300
       extra 5]
   (with-context (context (device))
-    (with-release [prog (compile! (program program-source))
-                   grid (grid-1d cnt (min 256 cnt))]
+      (with-release [prog (compile! (program program-source))
+                     grid (grid-1d cnt (min 256 cnt))]
 
-      (with-release [modl (module prog)
-                     fun (function modl "inc")
-                     host-a (float-array (+ cnt extra))
-                     gpu-a (mem-alloc (* Float/BYTES (+ cnt extra)))]
-        (aset-float host-a 0 1)
-        (aset-float host-a 10 100)
-        (memcpy-host! host-a gpu-a)
-        (launch! fun grid (parameters cnt gpu-a))
-        (synchronize!)
-        (memcpy-host! gpu-a host-a)
-        (facts
-         (aget host-a 0) => 2.0
-         (aget host-a 10) => 101.0
-         (aget host-a (dec cnt)) => 1.0
-         (aget host-a cnt) => 0.0
-         (aget host-a (dec (+ cnt extra))) => 0.0))
+        (with-release [modl (module prog)
+                       fun (function modl "inc")
+                       host-a (float-array (+ cnt extra))
+                       gpu-a (mem-alloc (* Float/BYTES (+ cnt extra)))]
+          (aset-float host-a 0 1)
+          (aset-float host-a 10 100)
+          (memcpy-host! host-a gpu-a)
+          (launch! fun grid (parameters cnt gpu-a))
+          (synchronize!)
+          (memcpy-host! gpu-a host-a)
+          (facts
+           (aget host-a 0) => 2.0
+           (aget host-a 10) => 101.0
+           (aget host-a (dec cnt)) => 1.0
+           (aget host-a cnt) => 0.0
+           (aget host-a (dec (+ cnt extra))) => 0.0))
 
-      (with-release [modl (module)]
-        (facts
-         (load! modl prog) => modl
-         (seq (memcpy-host! (global modl "gpu_a") (float-array 3))) => (seq [1.0 2.0 3.0]))))))
+        (with-release [modl (module)]
+          (facts
+           (load! modl prog) => modl
+           (seq (memcpy-host! (global modl "gpu_a") (float-array 3))) => (seq [1.0 2.0 3.0]))))))
 
 ;; =============== Stream Management Tests ==============================================
 
@@ -180,8 +183,9 @@
 (facts
  "Peer access tests"
  (let [dev (device)]
-   (with-context (context dev)
-     (when (can-access-peer dev dev)
-       (enable-peer-access!) => *context*
-       (disable-peer-access!) => *context*)
-     (p2p-attribute dev dev :access-supported) => (throws UnsupportedOperationException))))
+   (let [ctx (context dev)]
+     (with-context ctx
+       (when (can-access-peer dev dev)
+         (enable-peer-access!) => ctx
+         (disable-peer-access!) => ctx)
+       (p2p-attribute dev dev :access-supported) => (throws UnsupportedOperationException)))))
