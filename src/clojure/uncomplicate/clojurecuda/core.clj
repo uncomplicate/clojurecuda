@@ -175,13 +175,18 @@
 ;; ================== Memory Management  ==============================================
 
 (defn memcpy!
-  "Copies `byte-count` or all possible device memory from `src` to `dst`.
+  "Copies `byte-count` or all possible device memory from `src` to `dst`. If `hstream` is supplied,
+  executes asynchronously.
 
   See [cuMemcpy](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)"
-  ([src dst ^long byte-count]
-   (with-check (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) byte-count) dst))
   ([src dst]
-   (memcpy! src dst (min ^long (size src) ^long (size dst)))))
+   (memcpy! src dst (min ^long (size src) ^long (size dst))))
+  ([src dst count-or-stream]
+   (if (number? count-or-stream)
+     (with-check (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) count-or-stream) dst)
+     (memcpy! src dst (min ^long (size src) ^long (size dst)) count-or-stream)))
+  ([src dst ^long byte-count hstream]
+   (with-check (JCudaDriver/cuMemcpyAsync (cu-ptr dst) (cu-ptr src) byte-count hstream) dst)))
 
 (defn memcpy-host!
   "Copies `byte-count` or all possible memory from `src` to `dst`, one of which

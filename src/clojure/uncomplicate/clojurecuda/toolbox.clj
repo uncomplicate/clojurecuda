@@ -47,7 +47,7 @@
    (let [res (int-array 1)]
      (memcpy-host! cu-buf res)
      (aget res 0)))
-  (^long [cu-buf hstream]
+  (^long [hstream cu-buf]
    (let [res (int-array 1)]
      (memcpy-host! cu-buf res hstream)
      (aget res 0))))
@@ -57,7 +57,7 @@
    (let [res (long-array 1)]
      (memcpy-host! cu-buf res)
      (aget res 0)))
-  (^long [cu-buf hstream]
+  (^long [hstream cu-buf]
    (let [res (long-array 1)]
      (memcpy-host! cu-buf res hstream)
      (aget res 0))))
@@ -67,7 +67,7 @@
    (let [res (double-array 1)]
      (memcpy-host! cu-buf res)
      (aget res 0)))
-  (^double [cu-buf hstream]
+  (^double [hstream cu-buf]
    (let [res (double-array 1)]
      (memcpy-host! cu-buf res hstream)
      (aget res 0))))
@@ -77,7 +77,7 @@
    (let [res (float-array 1)]
      (memcpy-host! cu-buf res)
      (aget res 0)))
-  (^double [cu-buf hstream]
+  (^double [hstream cu-buf]
    (let [res (float-array 1)]
      (memcpy-host! cu-buf res hstream)
      (aget res 0))))
