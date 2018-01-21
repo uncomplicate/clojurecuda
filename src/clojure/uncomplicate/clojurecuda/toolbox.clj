@@ -18,29 +18,43 @@
     (quot (+ n (dec max-block-size)) max-block-size)
     1))
 
-(defn launch-reduce!
-  ([hstream main-kernel reduction-kernel main-params reduction-params n block-n]
-   (launch! main-kernel (grid-1d n block-n) hstream (apply parameters n main-params))
-   (loop [global-size (count-blocks block-n n)]
-     (when (< 1 global-size)
-       (launch! reduction-kernel (grid-1d global-size block-n) hstream
-                (apply parameters global-size reduction-params))
-       (recur (count-blocks block-n global-size)))))
-  ([hstream main-kernel reduction-kernel main-params reduction-params n]
-   (launch-reduce! hstream main-kernel reduction-kernel main-params reduction-params n 1024))
-  ([hstream main-kernel reduction-kernel main-params reduction-params m n block-m block-n & [wgs-m wgs-n]]
-   (launch! main-kernel (grid-2d m n block-m block-n) hstream (apply parameters m main-params))
-   (let [[m n block-m block-n] (if (and wgs-m wgs-n)
-                                 [n (count-blocks block-m m) wgs-m wgs-n]
-                                 [m (count-blocks block-n n) block-m block-n])]
-     (if (or (< 1 ^long block-n) (= 1 ^long n))
-       (loop [n ^long n]
-         (when (< 1 n)
-           (launch! reduction-kernel (grid-2d m n block-m block-n) hstream
-                    (apply parameters n reduction-params))
-           (recur (count-blocks block-n n))))
-       (throw (IllegalArgumentException.
-               (format "block-n %d would cause infinite recursion for n:%d." block-n n)))))))
+(let [pointer-arr-class (class (make-parameters 0))]
+
+  (defn launch-reduce!
+    ([hstream main-kernel reduction-kernel main-params reduction-params n block-n]
+     (let [main-params (if (instance? pointer-arr-class main-params)
+                         (set-parameter! main-params 0 n)
+                         (apply parameters n main-params))
+           reduction-params (if (instance? pointer-arr-class reduction-params)
+                              reduction-params
+                              (apply parameters 0 reduction-params))]
+       (launch! main-kernel (grid-1d n block-n) hstream main-params)
+       (loop [global-size (count-blocks block-n n)]
+         (when (< 1 global-size)
+           (launch! reduction-kernel (grid-1d global-size block-n) hstream
+                    (set-parameter! reduction-params 0 global-size))
+           (recur (count-blocks block-n global-size))))))
+    ([hstream main-kernel reduction-kernel main-params reduction-params n]
+     (launch-reduce! hstream main-kernel reduction-kernel main-params reduction-params n 1024))
+    ([hstream main-kernel reduction-kernel main-params reduction-params m n block-m block-n & [wgs-m wgs-n]]
+     (let [main-params (if (instance? pointer-arr-class main-params)
+                         (set-parameter! main-params 0 m)
+                         (apply parameters m main-params))
+           reduction-params (if (instance? pointer-arr-class reduction-params)
+                              reduction-params
+                              (apply parameters 0 reduction-params))]
+       (launch! main-kernel (grid-2d m n block-m block-n) hstream main-params)
+       (let [[m n block-m block-n] (if (and wgs-m wgs-n)
+                                     [n (count-blocks block-m m) wgs-m wgs-n]
+                                     [m (count-blocks block-n n) block-m block-n])]
+         (if (or (< 1 ^long block-n) (= 1 ^long n))
+           (loop [n ^long n]
+             (when (< 1 n)
+               (launch! reduction-kernel (grid-2d m n block-m block-n) hstream
+                        (set-parameter! reduction-params 0 n))
+               (recur (count-blocks block-n n))))
+           (throw (IllegalArgumentException.
+                   (format "block-n %d would cause infinite recursion for n:%d." block-n n)))))))))
 
 (defn read-int
   (^long [cu-buf]
