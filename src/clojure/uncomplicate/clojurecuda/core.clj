@@ -611,13 +611,37 @@
       (JCudaDriver/cuModuleGetGlobal res byte-size m name)
       (cu-linear-memory res (aget byte-size 0) true))))
 
+(defn make-parameters
+  "TODO"
+  [^long len]
+  (make-array Pointer len))
+
+(defn set-parameter!
+  "TODO"
+  [^"[Ljcuda.Pointer;" arr ^long i parameter]
+  (aset arr i (ptr parameter))
+  arr)
+
+(defn set-parameters!
+  "TODO"
+  [^"[Ljcuda.Pointer;" arr i parameter & parameters]
+  (aset arr ^long i (ptr parameter))
+  (loop [i (inc ^long i) parameters parameters]
+    (if parameters
+      (do
+        (aset arr i (ptr (first parameters)))
+        (recur (inc i) (next parameters)))
+      arr)))
+
 (defn parameters
-  "Creates a `Pointer` to an array of `Pointer`s to CUDA `params`. `params` can be any object on
+  "Creates an array of `Pointer`s to CUDA `params`. `params` can be any object on
   device ([[CULinearMemory]] for example), or host (arrays, numbers) that makes sense as a kernel
-  parameter per CUDA specification. Use the result as an argument in [[launch!]].
+  parameter per CUDA specification. Use the result as an parameterument in [[launch!]].
   "
-  [& params]
-  (Pointer/to ^"[Ljcuda.Pointer;" (into-array Pointer (map ptr params))))
+  ([parameter & parameters]
+   (let [len (if parameters (inc (count parameters)) 1)
+         param-arr (make-parameters len)]
+     (apply set-parameters! param-arr 0 parameter parameters))))
 
 ;; ====================== Execution Control ==================================
 
@@ -638,15 +662,15 @@
 
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
-  ([^CUfunction fun ^GridDim grid-dim shared-mem-bytes hstream ^Pointer params]
+  ([^CUfunction fun ^GridDim grid-dim shared-mem-bytes hstream ^"[Ljcuda.Pointer;" params]
    (with-check
      (JCudaDriver/cuLaunchKernel fun (.grid-x grid-dim) (.grid-y grid-dim) (.grid-z grid-dim)
                                  (.block-x grid-dim) (.block-y grid-dim) (.block-z grid-dim)
-                                 shared-mem-bytes hstream params nil)
+                                 shared-mem-bytes hstream (Pointer/to params) nil)
      fun))
-  ([^CUfunction fun ^GridDim grid-dim hstream ^Pointer params]
+  ([^CUfunction fun ^GridDim grid-dim hstream params]
    (launch! fun grid-dim 0 hstream params))
-  ([^CUfunction fun ^GridDim grid-dim ^Pointer params]
+  ([^CUfunction fun ^GridDim grid-dim params]
    (launch! fun grid-dim 0 nil params)))
 
 ;; ================== Stream Management ======================================
