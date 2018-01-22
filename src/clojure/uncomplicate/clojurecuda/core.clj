@@ -185,8 +185,18 @@
    (if (number? count-or-stream)
      (with-check (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) count-or-stream) dst)
      (memcpy! src dst (min ^long (size src) ^long (size dst)) count-or-stream)))
+  ([src dst src-offset dst-offset count-or-stream]
+   (if (number? count-or-stream)
+     (with-check (JCudaDriver/cuMemcpy (with-offset (cu-ptr dst) dst-offset)
+                                       (with-offset (cu-ptr src) src-offset) count-or-stream)
+       dst)
+     (memcpy! src dst src-offset dst-offset (min ^long (size src) ^long (size dst)) count-or-stream)))
   ([src dst ^long byte-count hstream]
-   (with-check (JCudaDriver/cuMemcpyAsync (cu-ptr dst) (cu-ptr src) byte-count hstream) dst)))
+   (with-check (JCudaDriver/cuMemcpyAsync (cu-ptr dst) (cu-ptr src) byte-count hstream) dst))
+  ([src dst src-offset dst-offset byte-count hstream]
+   (with-check (JCudaDriver/cuMemcpyAsync (with-offset (cu-ptr dst) dst-offset)
+                                          (with-offset (cu-ptr src) src-offset) byte-count hstream)
+     dst)))
 
 (defn memcpy-host!
   "Copies `byte-count` or all possible memory from `src` to `dst`, one of which
