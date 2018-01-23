@@ -14,7 +14,7 @@
   Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
-             [core :refer [Releaseable release wrap-float wrap-double wrap-long wrap-int]]
+             [core :refer [Releaseable with-release release wrap-float wrap-double wrap-long wrap-int]]
              [utils :refer [mask]]]
             [uncomplicate.clojurecuda
              [protocols :refer :all]
@@ -157,8 +157,8 @@
   Does NOT release the context.
   "
   [ctx & body]
-  `(do
-     (push-context! ~ctx)
+  `(let [ctx# ~ctx]
+     (push-context! ctx#)
      (try
        ~@body
        (finally (pop-context!)))))
@@ -168,9 +168,8 @@
   Releases the context. Be careful! If you try to release a previously released context, JVM might crash!
   "
   [ctx & body]
-  `(try
-     (in-context ~ctx ~@body)
-     (finally (release ~ctx))))
+  `(with-release [ctx# ~ctx]
+     (in-context ctx# ~@body)))
 
 ;; ================== Memory Management  ==============================================
 
@@ -235,10 +234,10 @@
 
 ;; ==================== Linear memory ================================================
 
-(deftype CULinearMemory [^CUdeviceptr cu ^Pointer p ^long s in-module]
+(deftype CULinearMemory [^CUdeviceptr cu ^Pointer p ^long s master]
   Releaseable
   (release [_]
-    (if-not in-module (release cu) true))
+    (if master (release cu) true))
   DeviceMem
   (cu-ptr [_]
     cu)
@@ -253,23 +252,30 @@
     (with-check (JCudaDriver/cuMemcpyDtoHAsync (host-ptr host) cu byte-size hstream) host)))
 
 (defn ^:private cu-linear-memory
-  ([^CUdeviceptr cu ^long size in-module]
+  ([^CUdeviceptr cu ^long size ^Boolean master]
    (let [cu-arr (make-array CUdeviceptr 1)]
      (aset ^"[Ljcuda.driver.CUdeviceptr;" cu-arr 0 cu)
-     (CULinearMemory. cu (Pointer/to ^"[Ljcuda.driver.CUdeviceptr;" cu-arr) size in-module)))
+     (CULinearMemory. cu (Pointer/to ^"[Ljcuda.driver.CUdeviceptr;" cu-arr) size master)))
   ([^CUdeviceptr cu ^long size]
-   (cu-linear-memory cu size false)))
+   (cu-linear-memory cu size true)))
 
 (defn mem-alloc
   "Allocates the `size` bytes of memory on the device. Returns a [[CULinearMemory]] object.
 
-  The memory is not cleared. `size` must be greater than `0`.
+  The old memory content is not cleared. `size` must be greater than `0`.
 
   See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   [^long size]
   (let [cu (CUdeviceptr.)]
     (with-check (JCudaDriver/cuMemAlloc cu size) (cu-linear-memory cu size))))
+
+(defn mem-sub-region
+  "Creates a [[CULinearMemory]] that references a sub-region of `mem` from origin to len."
+  [mem ^long origin ^long byte-count]
+  (let [origin (max 0 origin)
+        byte-count (min byte-count (- ^long (size mem) origin))])
+  (cu-linear-memory (with-offset (cu-ptr mem) origin) byte-count false))
 
 (defn mem-alloc-managed*
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
@@ -619,7 +625,7 @@
         byte-size (long-array 1)]
     (with-check
       (JCudaDriver/cuModuleGetGlobal res byte-size m name)
-      (cu-linear-memory res (aget byte-size 0) true))))
+      (cu-linear-memory res (aget byte-size 0) false))))
 
 (defn make-parameters
   "TODO"

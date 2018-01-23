@@ -36,7 +36,7 @@
 
 (facts
  "Context tests"
- (let [dev (device 0)]
+ (with-release [dev (device 0)]
    (let [ctx (context* dev 0)]
      ctx => truthy
      (release ctx) => true
@@ -58,7 +58,6 @@
   (with-context (context (device))
       (with-release [prog (compile! (program program-source))
                      grid (grid-1d cnt (min 256 cnt))]
-
         (with-release [modl (module prog)
                        fun (function modl "inc")
                        host-a (float-array (+ cnt extra))
@@ -119,6 +118,18 @@
      (memcpy! cuda1 cuda2) => cuda2
      (memcpy-host! cuda2 host2) => host2
      (.getFloat ^ByteBuffer host2 0) => 173.0))
+
+  (facts
+   "Linear memory sub-region tests."
+   (with-release [cuda (mem-alloc 20)]
+     (memcpy-host! (float-array [1 2 3 4 5]) cuda) => cuda
+     (let [cuda1 (mem-sub-region cuda 0 8)
+           cuda2 (mem-sub-region cuda 8 1000)]
+       (seq (memcpy-host! cuda1 (float-array 2))) => (seq (float-array [1 2]))
+       (seq (memcpy-host! cuda2 (float-array 3))) => (seq (float-array [3 4 5]))
+       (do (release cuda1)
+           (release cuda2)
+           (seq (memcpy-host! cuda (float-array 5))) => (seq (float-array [1 2 3 4 5]))))))
 
   (facts
    "mem-host-alloc tests."
