@@ -171,6 +171,13 @@
   `(with-release [ctx# ~ctx]
      (in-context ctx# ~@body)))
 
+(defmacro with-default
+  "Creates the default context and executes the body in it.
+  "
+  [& body]
+  `(with-release [dev# (device)]
+     (with-context (context dev#) ~@body)))
+
 ;; ================== Memory Management  ==============================================
 
 (defn memcpy!
