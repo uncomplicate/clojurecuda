@@ -54,8 +54,7 @@
 (defn program
   "TODO"
   ([name source-code headers]
-   (program* name source-code (into-array String (take-nth 2 (next headers)))
-             (into-array String (take-nth 2 headers))))
+   (program* name source-code (into-array String (vals headers)) (into-array String (keys headers))))
   ([name source-code]
    (program* name source-code nil nil))
   ([source-code]
