@@ -175,8 +175,10 @@
   "Creates the default context and executes the body in it.
   "
   [& body]
-  `(with-release [dev# (device)]
-     (with-context (context dev#) ~@body)))
+  `(do
+     (init)
+     (with-release [dev# (device)]
+       (with-context (context dev#) ~@body))))
 
 ;; ================== Memory Management  ==============================================
 
