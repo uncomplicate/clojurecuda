@@ -19,7 +19,7 @@
 (init)
 
 (let [program-source (str (slurp "src/cuda/uncomplicate/clojurecuda/kernels/reduction.cu") "\n"
-                          (slurp "test/cuda/kernels/sum.cu"))
+                          (slurp "test/cuda/uncomplicate/clojurecuda/kernels/sum.cu"))
       cnt (- (long (Math/pow 2 13)) 7)]
 
   (with-context (context (device))

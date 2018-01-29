@@ -52,23 +52,25 @@
 
 ;; =============== Module Management & Execution Control Tests =====================================
 
-(let [program-source (slurp "test/cuda/test.cu")
+(let [program-source (slurp "test/cuda/uncomplicate/clojurecuda/kernels/test.cu")
       cnt 300
       extra 5]
   (with-context (context (device))
-      (with-release [prog (compile! (program program-source))
+      (with-release [prog (compile! (program program-source {"dummy" "placeholder"}))
                      grid (grid-1d cnt (min 256 cnt))]
         (with-release [modl (module prog)
                        fun (function modl "inc")
                        host-a (float-array (+ cnt extra))
                        gpu-a (mem-alloc (* Float/BYTES (+ cnt extra)))]
-          (aset-float host-a 0 1)
-          (aset-float host-a 10 100)
-          (memcpy-host! host-a gpu-a)
-          (launch! fun grid (parameters cnt gpu-a))
-          (synchronize!)
-          (memcpy-host! gpu-a host-a)
+
           (facts
+           "Test launch"
+           (aset-float host-a 0 1)
+           (aset-float host-a 10 100)
+           (memcpy-host! host-a gpu-a) => gpu-a
+           (launch! fun grid (parameters cnt gpu-a)) => fun
+           (synchronize!) => true
+           (memcpy-host! gpu-a host-a) => host-a
            (aget host-a 0) => 2.0
            (aget host-a 10) => 101.0
            (aget host-a (dec cnt)) => 1.0
@@ -77,8 +79,16 @@
 
         (with-release [modl (module)]
           (facts
+           "Test device globals"
            (load! modl prog) => modl
-           (seq (memcpy-host! (global modl "gpu_a") (float-array 3))) => (seq [1.0 2.0 3.0]))))))
+           (with-release [fun (function modl "constant_inc")
+                          gpu-a (global modl "gpu_a")
+                          constant-gpu-a (global modl "constant_gpu_a")]
+             (seq (memcpy-host! gpu-a  (float-array 3))) => (seq [1.0 2.0 3.0])
+             (memcpy! gpu-a constant-gpu-a) => constant-gpu-a
+             (launch! fun (grid-1d 3) (parameters 3 gpu-a))
+             (seq (memcpy-host! constant-gpu-a (float-array 3))) => (seq [1.0 2.0 3.0])
+             (seq (memcpy-host! gpu-a (float-array 3))) => (seq [2.0 4.0 6.0])))))))
 
 ;; =============== Stream Management Tests ==============================================
 

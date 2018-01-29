@@ -24,7 +24,7 @@ extern "C" {
 
     __device__ ACCUMULATOR block_reduction_sum (const ACCUMULATOR value) {
 
-        int local_id = threadIdx.x;
+        const int local_id = threadIdx.x;
 
         __shared__ ACCUMULATOR lacc[BLOCKS];
         lacc[local_id] = value;
@@ -51,9 +51,9 @@ extern "C" {
 
     __device__ ACCUMULATOR block_reduction_sum_row (const ACCUMULATOR value) {
 
-        int local_row = threadIdx.x;
-        int local_col = threadIdx.y;
-        int local_m = blockDim.x;
+        const int local_row = threadIdx.x;
+        const int local_col = threadIdx.y;
+        const int local_m = blockDim.x;
 
         __shared__ ACCUMULATOR lacc[BLOCKSm * BLOCKSn];
         lacc[local_row + local_col * local_m] = value;
@@ -81,9 +81,9 @@ extern "C" {
 
     __device__ ACCUMULATOR block_reduction_sum_col (const ACCUMULATOR value) {
 
-        int local_row = threadIdx.y;
-        int local_col = threadIdx.x;
-        int local_m = blockDim.y;
+        const int local_row = threadIdx.y;
+        const int local_col = threadIdx.x;
+        const int local_m = blockDim.y;
 
         __shared__ ACCUMULATOR lacc[BLOCKSm * BLOCKSn];
         lacc[local_row + local_col * local_m] = value;

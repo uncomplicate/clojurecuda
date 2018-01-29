@@ -55,10 +55,10 @@
   "TODO"
   ([name source-code headers]
    (program* name source-code (into-array String (vals headers)) (into-array String (keys headers))))
-  ([name source-code]
-   (program* name source-code nil nil))
+  ([source-code headers]
+   (program nil source-code headers))
   ([source-code]
-   (program* nil source-code nil nil)))
+   (program nil source-code nil)))
 
 (defn program-log
   "TODO"
