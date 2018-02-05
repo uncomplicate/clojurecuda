@@ -43,7 +43,7 @@
      (stream-flag hstream) => (stream-flags :non-blocking)
      (:flag (info hstream))))) => :non-blocking
 
-(let [program-source (slurp "test/cuda/test.cu")]
+(let [program-source (slurp "test/cuda/uncomplicate/clojurecuda/kernels/test.cu")]
   (with-context (context (device))
     (with-release [prog (compile! (program program-source))
                    modl (module prog)

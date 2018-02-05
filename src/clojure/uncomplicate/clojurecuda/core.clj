@@ -19,7 +19,7 @@
             [uncomplicate.clojurecuda
              [protocols :refer :all]
              [constants :refer :all]
-             [info :refer [api-version cache-config limit* ctx-device]]
+             [info :refer [api-version cache-config limit* ctx-device info]]
              [utils :refer [with-check]]]
             [clojure.string :as str]
             [clojure.core.async :refer [go >!]])
@@ -39,7 +39,7 @@
 (extend-type Pointer
   WithOffset
   (with-offset [cu byte-offset]
-   (.withByteOffset cu byte-offset)))
+    (.withByteOffset cu byte-offset)))
 
 (extend-type CUdeviceptr
   Releaseable
@@ -47,7 +47,7 @@
     (with-check (JCudaDriver/cuMemFree dp) true))
   WithOffset
   (with-offset [cu byte-offset]
-   (.withByteOffset ^CUdeviceptr cu ^long byte-offset)))
+    (.withByteOffset ^CUdeviceptr cu ^long byte-offset)))
 
 (extend-type CUmodule
   Releaseable
@@ -88,6 +88,7 @@
        (if (number? id)
          (JCudaDriver/cuDeviceGet res id)
          (JCudaDriver/cuDeviceGetByPCIBusId res id))
+       {:device-id id}
        res)))
   ([]
    (device 0)))
@@ -100,7 +101,9 @@
   "
   [dev ^long flags]
   (let [res (CUcontext.)]
-    (with-check (JCudaDriver/cuCtxCreate res flags dev) res)))
+    (with-check (JCudaDriver/cuCtxCreate res flags dev)
+      {:dev (info dev) :flags flags}
+      res)))
 
 (defn context
   "Creates a CUDA context on the `device` using a keyword `flag`.
@@ -570,12 +573,12 @@
 (extend-type String
   ModuleLoad
   (module-load [data m]
-    (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m data) m)))
+    (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m data) {:data data} m)))
 
 (extend-type (Class/forName "[B")
   ModuleLoad
   (module-load [binary m]
-    (with-check (JCudaDriver/cuModuleLoadFatBinary ^CUmodule m ^bytes binary) m)))
+    (with-check (JCudaDriver/cuModuleLoadFatBinary ^CUmodule m ^bytes binary) {:module m} m)))
 
 (defn load!
   "Load a module's data from a [[ntrtc/ptx]] string, `nvrtcProgram`, or a binary `data`, for already
@@ -601,28 +604,30 @@
   ([^long dim-x]
    (GridDim. (Math/ceil (/ dim-x 1024)) 1 1 1024 1 1))
   ([^long dim-x ^long block-x]
-   (GridDim. (Math/ceil (/ dim-x block-x)) 1 1 block-x 1 1)))
+   (let [block-x (min dim-x block-x)]
+     (GridDim. (Math/ceil (/ dim-x block-x)) 1 1 block-x 1 1))))
 
 (defn grid-2d
   "Creates a 2-dimensional [[GridDim]] record with grid and block dimensions x and y.
   Note: dim-x is the total number of threads globally, not the number of blocks."
   ([^long dim-x ^long dim-y]
-   (GridDim. (Math/ceil (/ dim-x 1024)) dim-y 1 1024 1 1))
-  ([^long dim-x ^long dim-y ^long block-x]
-   (GridDim. (Math/ceil (/ dim-x block-x)) dim-y 1 block-x 1 1))
+   (GridDim. (Math/ceil (/ dim-x 32)) (Math/ceil (/ dim-x 32)) 1 32 32 1))
   ([^long dim-x ^long dim-y ^long block-x ^long block-y]
-   (GridDim. (Math/ceil (/ dim-x block-x)) (Math/ceil (/ dim-y block-y)) 1 block-x block-y 1)))
+   (let [block-x (min dim-x block-x)
+         block-y (min dim-y block-y)]
+     (GridDim. (Math/ceil (/ dim-x block-x)) (Math/ceil (/ dim-y block-y)) 1 block-x block-y 1))))
 
 (defn grid-3d
   "Creates a 3-dimensional [[GridDim]] record with grid and block dimensions x, y, and z.
   Note: dim-x is the total number of threads globally, not the number of blocks."
   ([^long dim-x ^long dim-y ^long dim-z]
    (GridDim. (Math/ceil (/ dim-x 1024)) dim-y dim-z 1024 1 1))
-  ([^long dim-x ^long dim-y ^long dim-z ^long block-x]
-   (GridDim. (Math/ceil (/ dim-x block-x)) dim-y dim-z block-x 1 1))
   ([dim-x dim-y dim-z block-x block-y block-z]
-   (GridDim. (Math/ceil (/ ^long dim-x ^long block-x)) (Math/ceil (/ ^long dim-y ^long block-y))
-             (Math/ceil (/ ^long dim-z ^long block-z)) block-x block-y block-z)))
+   (let [block-x (min ^long dim-x ^long block-x)
+         block-y (min ^long dim-y ^long block-y)
+         block-z (min ^long dim-z ^long block-z)]
+     (GridDim. (Math/ceil (/ ^long dim-x block-x)) (Math/ceil (/ ^long dim-y block-y))
+               (Math/ceil (/ ^long dim-z block-z)) block-x block-y block-z))))
 
 (defn global
   "Returns CUDA global `CULinearMemory` named `name` from module `m`, with optionally specified size..
@@ -634,6 +639,7 @@
         byte-size (long-array 1)]
     (with-check
       (JCudaDriver/cuModuleGetGlobal res byte-size m name)
+      {:name name}
       (cu-linear-memory res (aget byte-size 0) false))))
 
 (defn make-parameters
@@ -677,7 +683,7 @@
   "
   [m name]
   (let [res (CUfunction.)]
-    (with-check (JCudaDriver/cuModuleGetFunction res m name) res)))
+    (with-check (JCudaDriver/cuModuleGetFunction res m name) {:name name} res)))
 
 (defn launch!
   "Invokes the kernel `fun` on a grid-dim grid of blocks, using parameters `params`.
@@ -692,7 +698,8 @@
      (JCudaDriver/cuLaunchKernel fun (.grid-x grid-dim) (.grid-y grid-dim) (.grid-z grid-dim)
                                  (.block-x grid-dim) (.block-y grid-dim) (.block-z grid-dim)
                                  shared-mem-bytes hstream (Pointer/to params) nil)
-     fun))
+     {:kernel (info fun) :grid-dim grid-dim :hstream hstream}
+     hstream))
   ([^CUfunction fun ^GridDim grid-dim hstream params]
    (launch! fun grid-dim 0 hstream params))
   ([^CUfunction fun ^GridDim grid-dim params]
@@ -850,8 +857,8 @@
   "
   [dev peer attribute]
   (p2p-attribute* dev peer (or (p2p-attributes attribute)
-                              (throw (ex-info "Unknown p2p attribute"
-                                              {:attribute attribute :available p2p-attributes})))))
+                               (throw (ex-info "Unknown p2p attribute"
+                                               {:attribute attribute :available p2p-attributes})))))
 
 (defn disable-peer-access!
   "Disables direct access to memory allocations in a peer context and unregisters any registered allocations.

@@ -12,27 +12,70 @@
             [uncomplicate.clojurecuda
              [core :refer :all]
              [nvrtc :refer [compile! program]]
+             [info :refer :all]
              [toolbox :refer :all]])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 
 (init)
 
-(let [program-source (str (slurp "src/cuda/uncomplicate/clojurecuda/kernels/reduction.cu") "\n"
-                          (slurp "test/cuda/uncomplicate/clojurecuda/kernels/sum.cu"))
-      cnt (- (long (Math/pow 2 13)) 7)]
+(let [dev (device)
+      cnt-m 311
+      cnt-n 9011
+      cnt (* cnt-m cnt-n)
+      program-source (str (slurp "src/cuda/uncomplicate/clojurecuda/kernels/reduction.cu") "\n"
+                          (slurp "test/cuda/uncomplicate/clojurecuda/kernels/toolbox-test.cu"))]
 
-  (with-context (context (device))
-    (with-release [prog (compile! (program program-source)
-                                  ["-DREAL=float" "-DACCUMULATOR=double" "-arch=compute_30"])
-                   m (module prog)
-                   sum-reduction (function m "sum_reduction")
-                   sum (function m "sum")
-                   host-x (float-array (range cnt))
-                   gpu-x (mem-alloc (* Float/BYTES cnt))
-                   gpu-acc (mem-alloc (* Double/BYTES (count-blocks 1024 cnt)))]
-      (facts
-       "Simple sum reduction."
-       (memcpy-host! host-x gpu-x)
-       (launch-reduce! nil sum sum-reduction [gpu-x gpu-acc] [gpu-acc] cnt 1024)
-       (first (memcpy-host! gpu-acc (double-array 1))) => (double (apply + (range cnt)))))))
+  (with-context (context dev)
+    (with-release [wgs (max-block-dim-x dev)
+                   prog (compile! (program program-source)
+                                  ["-DREAL=float" "-DACCUMULATOR=double" "-arch=compute_30"
+                                   (format "-DWGS=%d" wgs)])
+                   modl (module prog)
+                   data (let [d (ByteBuffer/allocateDirect (* cnt Float/BYTES))]
+                          (.order  d (ByteOrder/nativeOrder))
+                          (dotimes [n cnt]
+                            (.putFloat ^ByteBuffer d (* n Float/BYTES) (float n)))
+                          d)
+                   cu-data (mem-alloc (* cnt Float/BYTES))
+                   sum-reduction-horizontal (function modl "sum_reduction_horizontal")
+                   sum-horizontal (function modl "sum_reduce_horizontal")]
+
+      (memcpy-host! data cu-data)
+
+      (let [acc-size (* Double/BYTES (max 1 (count-blocks wgs cnt)))]
+        (with-release [sum-reduction-kernel (function modl "sum_reduction")
+                       sum-reduce-kernel (function modl "sum_reduce")
+                       cu-acc (mem-alloc acc-size)]
+          (facts
+           "Test 1D reduction."
+           (launch-reduce! nil sum-reduce-kernel sum-reduction-kernel [cu-acc cu-data] [cu-acc] cnt wgs)
+           (read-double cu-acc) => 3926780329410.0)))
+
+      (let [wgs-m 64
+            wgs-n 16
+            acc-size (* Double/BYTES (max 1 (* cnt-m (count-blocks wgs-n cnt-n))))
+            res (double-array cnt-m)]
+        (with-release [sum-reduction-horizontal (function modl "sum_reduction_horizontal")
+                       sum-reduce-horizontal (function modl "sum_reduce_horizontal")
+                       cu-acc (mem-alloc acc-size)]
+          (facts
+           "Test horizontal 2D reduction."
+           (launch-reduce! nil sum-reduce-horizontal sum-reduction-horizontal
+                           [cu-acc cu-data] [cu-acc] cnt-m cnt-n wgs-m wgs-n)
+           (memcpy-host! cu-acc res)
+           (apply + (seq res)) => (roughly 3.92678032941E12))))
+
+      (let [wgs-m 64
+            wgs-n 16
+            acc-size (* Double/BYTES (max 1 (* cnt-n (count-blocks wgs-m cnt-m))))
+            res (double-array cnt-n)]
+        (with-release [sum-reduction-vertical (function modl "sum_reduction_vertical")
+                       sum-reduce-vertical (function modl "sum_reduce_vertical")
+                       cu-acc (mem-alloc acc-size)]
+          (facts
+           "Test horizontal 2D reduction."
+           (launch-reduce! nil sum-reduce-vertical sum-reduction-vertical
+                           [cu-acc cu-data] [cu-acc] cnt-n cnt-m wgs-n wgs-m)
+           (memcpy-host! cu-acc res)
+           (apply + (seq res)) => (roughly 3.92678032941E12)))))))

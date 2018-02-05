@@ -8,16 +8,16 @@ extern "C" {
 #define ACCUMULATOR REAL
 #endif
     
-#ifndef BLOCKS
-#define BLOCKS 1024
+#ifndef WGS
+#define WGS 1024
 #endif
 
-#ifndef BLOCKSm
-#define BLOCKSm 64
+#ifndef WGSm
+#define WGSm 64
 #endif
 
-#ifndef BLOCKSn
-#define BLOCKSn 16
+#ifndef WGSn
+#define WGSn 16
 #endif
 
 // ================= Sum reduction =============================================
@@ -26,7 +26,7 @@ extern "C" {
 
         const int local_id = threadIdx.x;
 
-        __shared__ ACCUMULATOR lacc[BLOCKS];
+        __shared__ ACCUMULATOR lacc[WGS];
         lacc[local_id] = value;
 
         __syncthreads();
@@ -34,7 +34,7 @@ extern "C" {
         ACCUMULATOR pacc = value;
         int i = blockDim.x;
         while (i > 0) {
-            bool include_odd = (i > ((i >> 1) << 1)) && (local_id == ((i >> 1) - 1));
+            const bool include_odd = (i > ((i >> 1) << 1)) && (local_id == ((i >> 1) - 1));
             i >>= 1;
             if (include_odd) {
                 pacc += lacc[local_id + i + 1];
@@ -49,21 +49,21 @@ extern "C" {
         return lacc[0];
     }
 
-    __device__ ACCUMULATOR block_reduction_sum_row (const ACCUMULATOR value) {
+    __device__ ACCUMULATOR block_reduction_sum_2 (const ACCUMULATOR value) {
 
         const int local_row = threadIdx.x;
         const int local_col = threadIdx.y;
         const int local_m = blockDim.x;
 
-        __shared__ ACCUMULATOR lacc[BLOCKSm * BLOCKSn];
+        __shared__ ACCUMULATOR lacc[WGS];
         lacc[local_row + local_col * local_m] = value;
 
         __syncthreads();
-
+        
         ACCUMULATOR pacc = value;
         int i = blockDim.y;
         while (i > 0) {
-            bool include_odd = (i > ((i >> 1) << 1)) && (local_col == ((i >> 1) - 1));
+            const bool include_odd = (i > ((i >> 1) << 1)) && (local_col == ((i >> 1) - 1));
             i >>= 1;
             if (include_odd) {
                 pacc += lacc[local_row + (local_col + i + 1) * local_m];
@@ -79,41 +79,35 @@ extern "C" {
 
     }
 
-    __device__ ACCUMULATOR block_reduction_sum_col (const ACCUMULATOR value) {
-
-        const int local_row = threadIdx.y;
-        const int local_col = threadIdx.x;
-        const int local_m = blockDim.y;
-
-        __shared__ ACCUMULATOR lacc[BLOCKSm * BLOCKSn];
-        lacc[local_row + local_col * local_m] = value;
-
-        __syncthreads();
-
-        ACCUMULATOR pacc = value;
-        int i = blockDim.x;
-        while (i > 0) {
-            bool include_odd = (i > ((i >> 1) << 1)) && (local_col == ((i >> 1) - 1));
-            i >>= 1;
-            if (include_odd) {
-                pacc += lacc[local_row + (local_col + i + 1) * local_m];
-            }
-            if (local_col < i) {
-                pacc += lacc[local_row + (local_col + i) * local_m];
-                lacc[local_row + local_col * local_m] = pacc;
-            }
-            __syncthreads();
-        }
-
-        return lacc[local_row];
-
-    }
-
-    __global__ void sum_reduction(int n, ACCUMULATOR* acc) {
-        int i = blockIdx.x * blockDim.x + threadIdx.x;
-        ACCUMULATOR sum = block_reduction_sum( (i < n) ? acc[i] : 0.0);
+    __global__ void sum_reduction(const int n, ACCUMULATOR* acc) {
+        const int gid = blockIdx.x * blockDim.x + threadIdx.x;
+        const ACCUMULATOR sum = block_reduction_sum( (gid < n) ? acc[gid] : 0.0);
         if (threadIdx.x == 0) {
             acc[blockIdx.x] = sum;
+        }
+    }
+
+    __global__ void sum_reduction_horizontal (const int m, const int n, ACCUMULATOR* acc) {
+        const int gid_0 = blockIdx.x * blockDim.x + threadIdx.x;
+        const int gid_1 = blockIdx.y * blockDim.y + threadIdx.y;
+        const int i = m * gid_1 + gid_0;
+        const bool valid = (gid_0 < m) && (gid_1 < n);
+        const ACCUMULATOR sum = block_reduction_sum_2( (valid) ? acc[i] : 0.0);
+        const bool write = valid && (threadIdx.y == 0);
+        if (write) {
+            acc[m * blockIdx.y + gid_0] = sum;
+        }
+    }
+
+    __global__ void sum_reduction_vertical (const int m, const int n, ACCUMULATOR* acc) {
+        const int gid_0 = blockIdx.x * blockDim.x + threadIdx.x;
+        const int gid_1 = blockIdx.y * blockDim.y + threadIdx.y;
+        const int i = n * gid_0 + gid_1;
+        const bool valid = (gid_0 < m) && (gid_1 < n);
+        const ACCUMULATOR sum = block_reduction_sum_2( (valid) ? acc[i] : 0.0);
+        const bool write = valid && (threadIdx.y == 0);
+        if (write) {
+            acc[m * blockIdx.y + gid_0] = sum;
         }
     }
 

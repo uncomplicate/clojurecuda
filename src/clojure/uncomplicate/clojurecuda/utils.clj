@@ -38,7 +38,7 @@
    (let [err (CUresult/stringFor err-code)]
      (ex-info (format "CUDA error: %s." err)
               {:name err :code err-code :type :cuda-error :details details})))
-  ([err-code]
+  ([^long err-code]
    (error err-code nil)))
 
 (defmacro with-check
@@ -52,7 +52,11 @@
       (with-check (some-jcuda-call-that-returns-error-code) result)
   "
   ([err-code form]
-   `(cu/with-check error ~err-code ~form)))
+   `(cu/with-check error ~err-code ~form))
+  ([err-code details form]
+   `(if (= 0 ~err-code)
+      ~form
+      (throw (error ~err-code ~details)))))
 
 (defmacro with-check-arr
   "Evaluates `form` if the integer in the `err-code` primitive int array is `0`,

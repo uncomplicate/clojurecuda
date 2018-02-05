@@ -68,7 +68,7 @@
            (aset-float host-a 0 1)
            (aset-float host-a 10 100)
            (memcpy-host! host-a gpu-a) => gpu-a
-           (launch! fun grid (parameters cnt gpu-a)) => fun
+           (launch! fun grid (parameters cnt gpu-a)) => nil
            (synchronize!) => true
            (memcpy-host! gpu-a host-a) => host-a
            (aget host-a 0) => 2.0
