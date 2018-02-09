@@ -17,10 +17,10 @@ To subscribe for announcements of releases, important changes and so on, please 
 
 A collection of Clojure libraries, currently containing:
 
-* [ClojureCUDA](http://clojurecuda.uncomplicate.org) - you are reading about it.
-* [ClojureCL](http://clojurecl.uncomplicate.org) - Similar to ClojureCUDA, but uses OpenCL, an open standard that support AMD, Intel, Nvidia, and other hardware.
-* [Neanderthal](http://neanderthal.uncomplicate.org) - Fast matrix computations and linear algebra in Clojure (CPU and GPU).
-* [Fluokitten](http://fluokitten.uncomplicate.org) - Category Theory in idiomatic Clojure.
+* [ClojureCUDA](https://clojurecuda.uncomplicate.org) - you are reading about it.
+* [ClojureCL](https://clojurecl.uncomplicate.org) - Similar to ClojureCUDA, but uses OpenCL, an open standard that support AMD, Intel, Nvidia, and other hardware.
+* [Neanderthal](https://neanderthal.uncomplicate.org) - Fast matrix computations and linear algebra in Clojure (CPU and GPU).
+* [Fluokitten](https://fluokitten.uncomplicate.org) - Category Theory in idiomatic Clojure.
 
 ## Get Involved
 

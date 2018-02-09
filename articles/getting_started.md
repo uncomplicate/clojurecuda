@@ -30,9 +30,9 @@ Here we initialize cuda and get the info of all devices.
 
 ## Overview and Features
 
-ClojureCUDA is a Clojure library for High Performance Computing with CUDA, which supports Nvidia's GPUs. If you need to create programs for AMD, Intel, or even Nvidia's GPUs, or Intel's and AMD's CPUs, you probably need [ClojureCL](http://clojurecl.uncomplicate.org), ClojureCUDA's OpenCL based cousin.
+ClojureCUDA is a Clojure library for High Performance Computing with CUDA, which supports Nvidia's GPUs. If you need to create programs for AMD, Intel, or even Nvidia's GPUs, or Intel's and AMD's CPUs, you probably need [ClojureCL](https://clojurecl.uncomplicate.org), ClojureCUDA's OpenCL based cousin.
 
-If you need higher-level high performance functionality, such as matrix computations, try [Neanderthal](http://neanderthal.uncomplicate.org).
+If you need higher-level high performance functionality, such as matrix computations, try [Neanderthal](https://neanderthal.uncomplicate.org).
 
 ## Installation
 
@@ -44,10 +44,10 @@ To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU dri
 
 The most straightforward way to include ClojureCUDA in your project is with Leiningen. Add the following dependency to your `project.clj`:
 
-![](http://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
+![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
 
 ClojureCUDA currently works out of the box on Linux, Windows, and OS X. For other plaforms, contact us.
 
 ## Where to go next
 
-Hopefully this guide got you started and now you'd like to learn more. CUDA programming requires a lot of knowledge about the CUDA parallel computing model, devices and specifics of parallel computations. The best beginner's guide, in my opinion, is the [OpenCL in Action](http://www.amazon.com/OpenCL-Action-Accelerate-Graphics-Computations/dp/1617290173) book. It is not based on CUDA, but OpenCL (which is an open standard similar to CUDA supported by [ClojureCL](http://clojurecl.uncomplicate.org). Most books for CUDA are not as good as that one, but there are plenty of them, so you'll find the one that suits your tastes (but I don't know which one to recommend for beginners). I expect to build a comprehensive base of articles and references for exploring this topic, so please check the [All Guides](/articles/guides.html) page from time to time. Of course, you should also check the [ClojureCUDA API](/codox) for specific details, and feel free to take a glance at [the source](https://github.com/uncomplicate/clojurecuda) while you are there.
+Hopefully this guide got you started and now you'd like to learn more. CUDA programming requires a lot of knowledge about the CUDA parallel computing model, devices and specifics of parallel computations. The best beginner's guide, in my opinion, is the [OpenCL in Action](https://www.amazon.com/OpenCL-Action-Accelerate-Graphics-Computations/dp/1617290173) book. It is not based on CUDA, but OpenCL (which is an open standard similar to CUDA supported by [ClojureCL](https://clojurecl.uncomplicate.org). Most books for CUDA are not as good as that one, but there are plenty of them, so you'll find the one that suits your tastes (but I don't know which one to recommend for beginners). I expect to build a comprehensive base of articles and references for exploring this topic, so please check the [All Guides](/articles/guides.html) page from time to time. Of course, you should also check the [ClojureCUDA API](/codox) for specific details, and feel free to take a glance at [the source](https://github.com/uncomplicate/clojurecuda) while you are there.
