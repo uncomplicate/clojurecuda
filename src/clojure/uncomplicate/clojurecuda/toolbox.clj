@@ -13,11 +13,6 @@
   for the examples of how to use them."
   (:require [uncomplicate.clojurecuda.core :refer :all]))
 
-(defn count-blocks ^long [^long max-block-size ^long n]
-  (if (< max-block-size n)
-    (quot (+ n (dec max-block-size)) max-block-size)
-    1))
-
 (let [pointer-arr-class (class (make-parameters 0))]
 
   (defn launch-reduce!
@@ -29,11 +24,11 @@
                               reduction-params
                               (apply parameters Integer/MAX_VALUE reduction-params))]
        (launch! main-kernel (grid-1d n local-n) hstream main-params)
-       (loop [global-size (count-blocks local-n n)]
+       (loop [global-size (blocks-count local-n n)]
          (when (< 1 global-size)
            (launch! reduction-kernel (grid-1d global-size local-n) hstream
                     (set-parameter! reduction-params 0 global-size))
-           (recur (count-blocks local-n global-size))))
+           (recur (blocks-count local-n global-size))))
        hstream))
     ([hstream main-kernel reduction-kernel main-params reduction-params m n local-m local-n]
      (let [main-params (if (instance? pointer-arr-class main-params)
@@ -44,12 +39,12 @@
                               (apply parameters Integer/MAX_VALUE Integer/MAX_VALUE reduction-params))]
        (if (or (< 1 ^long local-n) (<= ^long local-n ^long n))
          (loop [hstream (launch! main-kernel (grid-2d m n local-m local-n) hstream main-params)
-                global-size (count-blocks local-n n)]
+                global-size (blocks-count local-n n)]
            (if (= 1 global-size)
              hstream
              (recur (launch! reduction-kernel (grid-2d m global-size local-m local-n) hstream
                              (set-parameters! reduction-params 0 m global-size))
-                    (count-blocks local-n global-size))))
+                    (blocks-count local-n global-size))))
          (throw (IllegalArgumentException.
                  (format "local-n %d would cause infinite recursion for n:%d." local-n n))))))))
 

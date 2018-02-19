@@ -5,7 +5,7 @@ extern "C" {
 #endif
     
 #ifndef ACCUMULATOR
-#define ACCUMULATOR REAL
+#define ACCUMULATOR float
 #endif
     
 #ifndef WGS

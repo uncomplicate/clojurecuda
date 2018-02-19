@@ -43,7 +43,7 @@
 
       (memcpy-host! data cu-data)
 
-      (let [acc-size (* Double/BYTES (max 1 (count-blocks wgs cnt)))]
+      (let [acc-size (* Double/BYTES (max 1 (blocks-count wgs cnt)))]
         (with-release [sum-reduction-kernel (function modl "sum_reduction")
                        sum-reduce-kernel (function modl "sum_reduce")
                        cu-acc (mem-alloc acc-size)]
@@ -54,7 +54,7 @@
 
       (let [wgs-m 64
             wgs-n 16
-            acc-size (* Double/BYTES (max 1 (* cnt-m (count-blocks wgs-n cnt-n))))
+            acc-size (* Double/BYTES (max 1 (* cnt-m (blocks-count wgs-n cnt-n))))
             res (double-array cnt-m)]
         (with-release [sum-reduction-horizontal (function modl "sum_reduction_horizontal")
                        sum-reduce-horizontal (function modl "sum_reduce_horizontal")
@@ -68,13 +68,13 @@
 
       (let [wgs-m 64
             wgs-n 16
-            acc-size (* Double/BYTES (max 1 (* cnt-n (count-blocks wgs-m cnt-m))))
+            acc-size (* Double/BYTES (max 1 (* cnt-n (blocks-count wgs-m cnt-m))))
             res (double-array cnt-n)]
         (with-release [sum-reduction-vertical (function modl "sum_reduction_vertical")
                        sum-reduce-vertical (function modl "sum_reduce_vertical")
                        cu-acc (mem-alloc acc-size)]
           (facts
-           "Test horizontal 2D reduction."
+           "Test vertical 2D reduction."
            (launch-reduce! nil sum-reduce-vertical sum-reduction-vertical
                            [cu-acc cu-data] [cu-acc] cnt-n cnt-m wgs-n wgs-m)
            (memcpy-host! cu-acc res)
