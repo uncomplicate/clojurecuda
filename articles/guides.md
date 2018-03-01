@@ -16,6 +16,12 @@ computing - you practically have a supercomputer on your desktop.
 
 Especially at the beginning, you might like to also try [ClojureCL](https://clojurecl.uncomplicate.org), since it is a more mature project with more examples, and even most of the book [OpenCL in Action](https://www.amazon.com/OpenCL-Action-Accelerate-Graphics-Computations/dp/1617290173) worked out in ClojureCL. That knowledge (and examples) are relatively easily transferrable to ClojureCUDA.
 
+## A series of tutorials about interactive GPU programming
+
+* [Hello CUDA](https://dragan.rocks/articles/18/Interactive-GPU-Programming-1-Hello-CUDA)
+* [Hello OpenCL](https://dragan.rocks/articles/18/Interactive-GPU-Programming-2-Hello-OpenCL)
+* [CUDA Context Shenanigans](https://dragan.rocks/articles/18/Interactive-GPU-Programming-3-CUDA-Context)
+
 ## Where to find CUDA books, tutorials, and documentation
 
 Learning CUDA programming requires learning the details of CUDA C++ kernel language and CUDA driver API, but even more important is learning the main concept of high performance computing, generally applicable in OpenCL, CUDA, Open MPI
