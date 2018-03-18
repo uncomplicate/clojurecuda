@@ -772,7 +772,7 @@
   ([hstream]
    (with-check (JCudaDriver/cuStreamSynchronize hstream) hstream)))
 
-(defrecord StreamCallbackInfo [^CUstream hstream status data])
+(defrecord StreamCallbackInfo [^CUstream stream status data])
 
 (deftype StreamCallback [ch]
   CUstreamCallback

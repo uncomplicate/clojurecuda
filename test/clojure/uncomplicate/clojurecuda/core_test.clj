@@ -8,7 +8,7 @@
 
 (ns uncomplicate.clojurecuda.core-test
   (:require [midje.sweet :refer :all]
-            [clojure.core.async :refer [chan]]
+            [clojure.core.async :refer [chan <!!]]
             [uncomplicate.commons.core :refer [release with-release]]
             [uncomplicate.clojurecuda
              [protocols :refer [size host-buffer]]
@@ -107,6 +107,22 @@
      (memcpy-host! cuda2 host2 strm) => host2
      (synchronize! strm)
      (.getFloat ^ByteBuffer host2 0) => 173.0)))
+
+(with-context (context (device 0) :map-host)
+
+  (facts
+   "Stream callbacks."
+   (let [ch (chan)]
+     (with-release [strm (stream :non-blocking)
+                    cuda1 (mem-alloc Float/BYTES)
+                    cuda2 (mem-alloc Float/BYTES)
+                    host1 (float-array [173.0])
+                    host2 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))
+                    cbk (callback ch)]
+       (add-callback! strm cbk)
+       (memcpy-host! host1 cuda1 strm) => cuda1
+       (memcpy! cuda1 cuda2) => cuda2
+       (:stream (<!! ch)) => strm))))
 
 ;; =============== Memory Management Tests ==============================================
 
