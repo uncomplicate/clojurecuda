@@ -29,8 +29,7 @@
             JITOptions CUlinkState]
            [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]
            [java.nio ByteBuffer ByteOrder]
-           java.nio.file.Path
-           java.util.Arrays))
+           java.nio.file.Path java.util.Arrays java.io.File))
 
 ;; ==================== Release resources =======================
 
@@ -642,18 +641,28 @@
   (module-load [data m]
     (with-check (JCudaDriver/cuModuleLoadDataJIT ^CUmodule m data (enc-jit-options {})) {:data data} m)))
 
+(defn link-add-file! [link-state type file-name options]
+  (let [type (or (jit-input-types type)
+                 (throw (ex-info "Invalid jit input type." {:type type :available jit-input-types})))]
+    (with-check (JCudaDriver/cuLinkAddFile ^CUlinkState link-state type file-name (enc-jit-options options))
+      {:file file-name}
+      link-state)))
+
 (extend-type Path
   ModuleLoad
   (module-load [file-path m]
-    (let [file-name (.getFileName file-path)]
+    (let [file-name (.toString file-path)]
       (with-check (JCudaDriver/cuModuleLoad ^CUmodule m file-name) {:file file-name} m)))
   (link-add [file-path link-state type options]
-    (let [type (or (jit-input-types type)
-                   (throw (ex-info "Invalid jit input type." {:type type :available jit-input-types})))
-          file-name (.toString file-path)]
-      (with-check (JCudaDriver/cuLinkAddFile ^CUlinkState link-state type file-name (enc-jit-options options))
-        {:file file-name}
-        link-state))))
+    (link-add-file! link-state type (.toString file-path) options)))
+
+(extend-type File
+  ModuleLoad
+  (module-load [file m]
+    (let [file-name (.toString file)]
+      (with-check (JCudaDriver/cuModuleLoad ^CUmodule m file-name) {:file file-name} m)))
+  (link-add [file link-state type options]
+    (link-add-file! link-state type (.toString file) options)))
 
 (defn link
   "Invokes CUDA linker on data provided as a vector `[[type source <options> <name>], ...]`.
