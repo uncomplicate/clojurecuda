@@ -17,7 +17,7 @@
 
 (init)
 
-(let [program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cuda")]
+(let [program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cu")]
   (with-context (context (device))
     (with-release [prog (compile! (program program-source))
                    m (module prog)
