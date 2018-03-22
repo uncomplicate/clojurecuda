@@ -42,7 +42,7 @@
    (error err-code nil)))
 
 (defmacro with-check
-  "Evaluates `form` if `err-code` is not zero (`CUDA_SUCCESS`), otherwise throws
+  "Evaluates `form` if `status` is not zero (`CUDA_SUCCESS`), otherwise throws
   an appropriate `ExceptionInfo` with decoded informative details.
   It helps fith JCuda methods that return error codes directly, while
   returning computation results through side-effects in arguments.
@@ -51,12 +51,13 @@
 
       (with-check (some-jcuda-call-that-returns-error-code) result)
   "
-  ([err-code form]
-   `(cu/with-check error ~err-code ~form))
-  ([err-code details form]
-   `(if (= 0 ~err-code)
-      ~form
-      (throw (error ~err-code ~details)))))
+  ([status form]
+   `(cu/with-check error ~status ~form))
+  ([status details form]
+   `(let [status# ~status]
+      (if (= 0 status#)
+        ~form
+        (throw (error status# ~details))))))
 
 (defmacro with-check-arr
   "Evaluates `form` if the integer in the `err-code` primitive int array is `0`,
@@ -69,8 +70,8 @@
             res (some-jcuda-call err)]
          (with-checl-arr err res))
   "
-  [err-code form]
-  `(with-check (aget (ints ~err-code) 0) ~form))
+  [status form]
+  `(with-check (aget (ints ~status) 0) ~form))
 
 (defmacro maybe
   "Evaluates form in try/catch block; if a CUDA-related exception is caught,

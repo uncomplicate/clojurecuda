@@ -24,9 +24,12 @@
   (host-ptr [this] "Host `Pointer` to this object.")
   (host-buffer [this] "The actual `ByteBuffer` on the host"))
 
+(defprotocol JITOption
+  (put-jit-option [value option options]))
+
 (defprotocol ModuleLoad
   (module-load [data m])
-  (module-load-jit [data m options]))
+  (link-add [data link-state type options]))
 
 (defprotocol Contextual
   "An object that has some dependency on a `CUcontext`."

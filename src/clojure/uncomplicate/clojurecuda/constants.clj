@@ -10,7 +10,8 @@
     uncomplicate.clojurecuda.constants
   "Defines constants and mappings from/to CUDA constants."
   (:import [jcuda.driver CUctx_flags JCudaDriver CUdevice_attribute CUcomputemode CUmemAttach_flags
-            CUfunc_cache CUdevice_P2PAttribute CUlimit CUsharedconfig CUstream_flags CUevent_flags]))
+            CUfunc_cache CUdevice_P2PAttribute CUlimit CUsharedconfig CUstream_flags CUevent_flags
+            CUjit_option CUjitInputType]))
 
 ;; ==================== Keyword mapping ======================================
 
@@ -116,3 +117,30 @@
     0 :prefer-none
     1 :prefer-shared
     mode))
+
+(def ^{:const true
+       :doc "Available jit options defined in the CUDA standard."}
+  jit-options
+  {:max-registers CUjit_option/CU_JIT_MAX_REGISTERS
+   :threads-per-block CUjit_option/CU_JIT_THREADS_PER_BLOCK
+   :wall-time CUjit_option/CU_JIT_WALL_TIME
+   :info-log-buffer CUjit_option/CU_JIT_INFO_LOG_BUFFER
+   :info-log-buffer-size-bytes CUjit_option/CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES
+   :error-log-buffer CUjit_option/CU_JIT_ERROR_LOG_BUFFER
+   :error-log-buffer-size-bytes CUjit_option/CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES
+   :optimization-level CUjit_option/CU_JIT_OPTIMIZATION_LEVEL
+   :target-from-cucontext CUjit_option/CU_JIT_TARGET_FROM_CUCONTEXT
+   :target CUjit_option/CU_JIT_TARGET
+   :fallback-strategy CUjit_option/CU_JIT_FALLBACK_STRATEGY
+   :generate-debug-info CUjit_option/CU_JIT_GENERATE_DEBUG_INFO
+   :log-verbose CUjit_option/CU_JIT_LOG_VERBOSE
+   :generate-line-info CUjit_option/CU_JIT_GENERATE_LINE_INFO
+   :cache-mode CUjit_option/CU_JIT_CACHE_MODE})
+
+(def ^{:const true
+       :doc "Available jit input types defined in the CUDA standard."}
+  jit-input-types
+  {:cubin CUjitInputType/CU_JIT_INPUT_CUBIN
+   :ptx CUjitInputType/CU_JIT_INPUT_PTX
+   :object CUjitInputType/CU_JIT_INPUT_OBJECT
+   :library CUjitInputType/CU_JIT_INPUT_LIBRARY})

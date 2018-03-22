@@ -25,9 +25,12 @@
             [clojure.core.async :refer [go >!]])
   (:import [jcuda Pointer NativePointerObject JCudaAccessor]
            [jcuda.driver JCudaDriver CUdevice CUcontext CUdeviceptr CUmemAttach_flags CUmodule
-            CUfunction CUstream CUstream_flags CUresult CUstreamCallback CUevent CUevent_flags]
+            CUfunction CUstream CUstream_flags CUresult CUstreamCallback CUevent CUevent_flags
+            JITOptions CUlinkState]
            [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]
-           [java.nio ByteBuffer ByteOrder]))
+           [java.nio ByteBuffer ByteOrder]
+           java.nio.file.Path
+           java.util.Arrays))
 
 ;; ==================== Release resources =======================
 
@@ -53,6 +56,11 @@
   Releaseable
   (release [m]
     (with-check (JCudaDriver/cuModuleUnload m) true)))
+
+(extend-type CUlinkState
+  Releaseable
+  (release [l]
+    (with-check (JCudaDriver/cuLinkDestroy l) true)))
 
 (extend-type CUstream
   Releaseable
@@ -431,22 +439,30 @@
 (extend-type Float
   Mem
   (ptr [this]
-    (ptr (wrap-float this))))
+    (ptr (wrap-float this)))
+  (size [this]
+    Float/BYTES))
 
 (extend-type Double
   Mem
   (ptr [this]
-    (ptr (wrap-double this))))
+    (ptr (wrap-double this)))
+  (size [this]
+    Double/BYTES))
 
 (extend-type Integer
   Mem
   (ptr [this]
-    (ptr (wrap-int this))))
+    (ptr (wrap-int this)))
+  (size [this]
+    Integer/BYTES))
 
 (extend-type Long
   Mem
   (ptr [this]
-    (ptr (wrap-long this))))
+    (ptr (wrap-long this)))
+  (size [this]
+    Long/BYTES))
 
 (extend-type (Class/forName "[F")
   HostMem
@@ -570,31 +586,116 @@
 
 ;; ================== Module Management =====================================
 
-(extend-type String
-  ModuleLoad
-  (module-load [data m]
-    (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m data) {:data data} m)))
+(extend-protocol JITOption
+  Integer
+  (put-jit-option [value option options]
+    (.putInt ^JITOptions options option value))
+  Long
+  (put-jit-option [value option options]
+    (.putInt ^JITOptions options option value))
+  Float
+  (put-jit-option [value option options]
+    (.putFloat ^JITOptions options option value))
+  Double
+  (put-jit-option [value option options]
+    (.putFloat ^JITOptions options option value))
+  nil
+  (put-jit-option [value option options]
+    (.put ^JITOptions options option)))
+
+(defn ^:private enc-jit-options [options]
+  (let [res (JITOptions.)]
+    (doseq [[option value] options]
+      (put-jit-option value
+                      (or (jit-options option)
+                          (throw (ex-info "Unknown jit option." {:option option :available jit-options})))
+                      res))
+    res))
 
 (extend-type (Class/forName "[B")
   ModuleLoad
   (module-load [binary m]
-    (with-check (JCudaDriver/cuModuleLoadFatBinary ^CUmodule m ^bytes binary) {:module m} m)))
+    (with-check (JCudaDriver/cuModuleLoadFatBinary ^CUmodule m ^bytes binary) {:module m} m))
+  JITOption
+  (put-jit-option [value option options]
+    (.putBytes ^JITOptions options option value)))
+
+(defn link-add-data! [link-state type data name options]
+  (let [type (or (jit-input-types type)
+                 (throw (ex-info "Invalid jit input type." {:type type :available jit-input-types})))]
+    (with-check (JCudaDriver/cuLinkAddData ^CUlinkState link-state type (ptr data) (size data) name
+                                           (enc-jit-options options))
+      {:data data}
+      link-state)))
+
+(extend-type String
+  ModuleLoad
+  (module-load [data m]
+    (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m data) {:data data} m))
+  (link-add [data link-state type options]
+    (let [data-bytes (.getBytes data)
+          data-image (Arrays/copyOf data-bytes (inc (alength data-bytes)))]
+      (link-add-data! link-state type data-image "unnamed" options))))
+
+(extend-type Pointer
+  ModuleLoad
+  (module-load [data m]
+    (with-check (JCudaDriver/cuModuleLoadDataJIT ^CUmodule m data (enc-jit-options {})) {:data data} m)))
+
+(extend-type Path
+  ModuleLoad
+  (module-load [file-path m]
+    (let [file-name (.getFileName file-path)]
+      (with-check (JCudaDriver/cuModuleLoad ^CUmodule m file-name) {:file file-name} m)))
+  (link-add [file-path link-state type options]
+    (let [type (or (jit-input-types type)
+                   (throw (ex-info "Invalid jit input type." {:type type :available jit-input-types})))
+          file-name (.toString file-path)]
+      (with-check (JCudaDriver/cuLinkAddFile ^CUlinkState link-state type file-name (enc-jit-options options))
+        {:file file-name}
+        link-state))))
+
+(defn link
+  "Invokes CUDA linker on data provided as a vector `[[type source <options> <name>], ...]`.
+  Produces a cubin compiled for particular architecture
+
+  See [cuLinkCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html) and
+  related `likadd` functions.
+  "
+  ([data options]
+   (let [link-state (CUlinkState.)
+         cubin-image (Pointer.)]
+     (with-check (JCudaDriver/cuLinkCreate (enc-jit-options options) link-state)
+       (do
+         (doseq [[type d options name] data]
+           (if name
+             (link-add-data! link-state type d name options)
+             (link-add d link-state type options)))
+         (with-check (JCudaDriver/cuLinkComplete link-state cubin-image (long-array 1)) cubin-image)))))
+  ([data]
+   (link data nil)))
 
 (defn load!
-  "Load a module's data from a [[ntrtc/ptx]] string, `nvrtcProgram`, or a binary `data`, for already
-  existing module.
+  "Load a module's data from a [[ntrtc/ptx]] string, `nvrtcProgram`, java path, or a binary `data`,
+  for already existing module.
 
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
-  [^CUmodule m data]
-  (module-load data m))
+  ([^CUmodule m data]
+   (module-load data m))
+  ([^CUmodule m ^Pointer data options]
+   (with-check (JCudaDriver/cuModuleLoadDataJIT ^CUmodule m data (enc-jit-options options))
+     {:data data :options options}
+     m)))
 
 (defn module
   "Creates a new CUDA module and loads a string, `nvrtcProgram`, or a binary `data`."
   ([]
    (CUmodule.))
   ([data]
-   (load! (CUmodule.) data)))
+   (load! (CUmodule.) data))
+  ([data options]
+   (load! (CUmodule.) data options)))
 
 (defrecord GridDim [^long grid-x ^long grid-y ^long grid-z ^long block-x ^long block-y ^long block-z])
 
@@ -745,7 +846,7 @@
    (stream* CUstream_flags/CU_STREAM_DEFAULT))
   ([flag]
    (stream* (or (stream-flags flag)
-                (throw (ex-info "Invaling stream flag." {:flag flag :available stream-flags})))))
+                (throw (ex-info "Invalid stream flag." {:flag flag :available stream-flags})))))
   ([^long priority flag]
    (stream* priority (or (stream-flags flag)
                          (throw (ex-info "Invaling stream flag." {:flag flag :available stream-flags}))))))

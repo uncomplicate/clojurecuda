@@ -16,7 +16,7 @@
              [core :refer [Releaseable release]]
              [utils :as cu]]
             [uncomplicate.clojurecuda
-             [protocols :refer [ModuleLoad module-load]]
+             [protocols :refer [ModuleLoad module-load link-add]]
              [utils :refer [with-check error]]])
   (:import [jcuda.driver JCudaDriver CUmodule]
            [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]))
@@ -94,5 +94,7 @@
   (release [p]
     (with-check-nvrtc (JNvrtc/nvrtcDestroyProgram p) true))
   ModuleLoad
-  (module-load [data m]
-    (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m (ptx data)) m)))
+  (module-load [program m]
+    (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m (ptx program)) m))
+  (link-add [program link-state type options]
+    (link-add (ptx program) link-state type options)))
