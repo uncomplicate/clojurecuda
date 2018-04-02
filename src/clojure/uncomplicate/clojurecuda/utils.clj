@@ -59,20 +59,6 @@
         ~form
         (throw (error status# ~details))))))
 
-(defmacro with-check-arr
-  "Evaluates `form` if the integer in the `err-code` primitive int array is `0`,
-  Otherwise throws an exception corresponding to the error code.
-  Similar to [[with-check]], but with the error code being held in an array instead
-  of being a primitive number. It helps with JCuda methods that return results
-  directly, and signal errors through side-effects in a primitive array argument.
-
-      (let [err (int-array 1)
-            res (some-jcuda-call err)]
-         (with-checl-arr err res))
-  "
-  [status form]
-  `(with-check (aget (ints ~status) 0) ~form))
-
 (defmacro maybe
   "Evaluates form in try/catch block; if a CUDA-related exception is caught,
   substitutes the result with the [ExceptionInfo](http://clojuredocs.org/clojure.core/ex-info) object."
