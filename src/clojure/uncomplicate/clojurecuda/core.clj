@@ -14,12 +14,13 @@
   Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
-             [core :refer [Releaseable with-release release wrap-float wrap-double wrap-long wrap-int]]
+             [core :refer [Releaseable with-release release info
+                           wrap-float wrap-double wrap-long wrap-int]]
              [utils :refer [mask]]]
             [uncomplicate.clojurecuda
              [protocols :refer :all]
              [constants :refer :all]
-             [info :refer [api-version cache-config limit* ctx-device info]]
+             [info :refer [api-version cache-config limit* ctx-device]]
              [utils :refer [with-check]]]
             [clojure.string :as str]
             [clojure.core.async :refer [go >!]])

@@ -12,6 +12,7 @@
   "
   (:require [clojure.string :as str]
             [uncomplicate.fluokitten.core :refer [fmap op]]
+            [uncomplicate.commons.core :refer [Info info]]
             [uncomplicate.clojurecuda
              [constants :refer :all]
              [utils :refer [with-check maybe]]])
@@ -37,11 +38,6 @@
   `(let [res# (int-array 1)
          err# (~method res# ~attribute ~object)]
      (long (with-check err# (aget res# 0)))))
-
-;;========================= Protocols =====================================
-
-(defprotocol Info
-  (info [this info-type] [this]))
 
 ;; =================== Version Management =================================
 

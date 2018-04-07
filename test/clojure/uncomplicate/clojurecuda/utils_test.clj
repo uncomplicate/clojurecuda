@@ -29,17 +29,6 @@
    (with-check (f false) :success) => (throws clojure.lang.ExceptionInfo)))
 
 (facts
- "with-check-arr tests"
- (let [f (fn [x ^ints err]
-           (do (aset err 0 (if x 0 -1))
-               x))
-       err (int-array 1)]
-   (let [res (f :success err)]
-     (with-check-arr err res) => :success)
-   (let [res (f false err)]
-     (with-check-arr err res))) => (throws clojure.lang.ExceptionInfo))
-
-(facts
  "maybe tests"
  (ex-data (maybe (throw (ex-info "Test Exception" {:data :test}))))
  => (throws clojure.lang.ExceptionInfo)

@@ -8,7 +8,7 @@
 
 (ns uncomplicate.clojurecuda.info-test
   (:require [midje.sweet :refer :all]
-            [uncomplicate.commons.core :refer [release with-release]]
+            [uncomplicate.commons.core :refer [release with-release info]]
             [uncomplicate.clojurecuda
              [core :refer :all]
              [constants :refer [stream-flags]]
