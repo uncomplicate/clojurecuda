@@ -30,7 +30,9 @@
             JITOptions CUlinkState]
            [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]
            [java.nio ByteBuffer ByteOrder]
-           java.nio.file.Path java.util.Arrays java.io.File))
+           java.nio.file.Path java.util.Arrays java.io.File
+           [uncomplicate.clojurecuda.internal CUReleaseable SafeCUcontext SafeCUdeviceptr
+            SafeCUmodule SafeCUlinkState SafeCUstream SafeCUevent]))
 
 ;; ==================== Release resources =======================
 
@@ -38,6 +40,11 @@
   Releaseable
   (release [c]
     (with-check (JCudaDriver/cuCtxDestroy c) true)))
+
+(extend-type SafeCUcontext
+  Releaseable
+  (release [c]
+    (with-check (.release c) true)))
 
 (extend-type Pointer
   WithOffset
@@ -52,25 +59,50 @@
   (with-offset [cu byte-offset]
     (.withByteOffset ^CUdeviceptr cu ^long byte-offset)))
 
+(extend-type SafeCUdeviceptr
+  Releaseable
+  (release [c]
+    (with-check (.release c) true)))
+
 (extend-type CUmodule
   Releaseable
   (release [m]
     (with-check (JCudaDriver/cuModuleUnload m) true)))
+
+(extend-type SafeCUmodule
+  Releaseable
+  (release [c]
+    (with-check (.release c) true)))
 
 (extend-type CUlinkState
   Releaseable
   (release [l]
     (with-check (JCudaDriver/cuLinkDestroy l) true)))
 
+(extend-type SafeCUlinkState
+  Releaseable
+  (release [c]
+    (with-check (.release c) true)))
+
 (extend-type CUstream
   Releaseable
   (release [s]
     (with-check (JCudaDriver/cuStreamDestroy s) true)))
 
+(extend-type SafeCUstream
+  Releaseable
+  (release [c]
+    (with-check (.release c) true)))
+
 (extend-type CUevent
   Releaseable
   (release [e]
     (with-check (JCudaDriver/cuEventDestroy e) true)))
+
+(extend-type SafeCUevent
+  Releaseable
+  (release [c]
+    (with-check (.release c) true)))
 
 (defn init
   "Initializes the CUDA driver."
@@ -108,7 +140,7 @@
   For available flags, see [[constants/ctx-flags]].
   "
   [dev ^long flags]
-  (let [res (CUcontext.)]
+  (let [res (SafeCUcontext.)]
     (with-check (JCudaDriver/cuCtxCreate res flags dev)
       {:dev (info dev) :flags flags}
       res)))
@@ -134,7 +166,7 @@
   See [cuCtxGetCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   "
   []
-  (let [ctx (CUcontext.)]
+  (let [ctx (SafeCUcontext.)]
     (with-check (JCudaDriver/cuCtxGetCurrent ctx) ctx)))
 
 (defn current-context!
@@ -151,7 +183,7 @@
   See [cuCtxPopCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   "
   []
-  (let [ctx (CUcontext.)]
+  (let [ctx (SafeCUcontext.)]
     (with-check (JCudaDriver/cuCtxPopCurrent ctx) ctx)))
 
 (defn push-context!
@@ -287,7 +319,7 @@
   See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   [^long size]
-  (let [cu (CUdeviceptr.)]
+  (let [cu (SafeCUdeviceptr.)]
     (with-check (JCudaDriver/cuMemAlloc cu size) (cu-linear-memory cu size))))
 
 (defn mem-sub-region
@@ -307,7 +339,7 @@
   See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   ([^long size ^long flag]
-   (let [cu (CUdeviceptr.)]
+   (let [cu (SafeCUdeviceptr.)]
      (with-check (JCudaDriver/cuMemAllocManaged cu size flag) (cu-linear-memory cu size)))))
 
 (defn mem-alloc-managed
@@ -358,7 +390,7 @@
     (with-check (JCudaDriver/cuMemcpyDtoHAsync (host-ptr host) cu byte-size hstream) host)))
 
 (defn ^:private cu-pinned-memory [^Pointer hp ^long size release-fn]
-  (let [cu (CUdeviceptr.)]
+  (let [cu (SafeCUdeviceptr.)]
     (with-check (JCudaDriver/cuMemHostGetDevicePointer cu hp 0)
       (let [cu-arr (make-array CUdeviceptr 1)
             buf (.order (.getByteBuffer hp 0 size) (ByteOrder/nativeOrder))]
@@ -673,7 +705,7 @@
   related `likadd` functions.
   "
   ([data options]
-   (let [link-state (CUlinkState.)
+   (let [link-state (SafeCUlinkState.)
          cubin-image (Pointer.)]
      (with-check (JCudaDriver/cuLinkCreate (enc-jit-options options) link-state)
        (do
@@ -701,11 +733,11 @@
 (defn module
   "Creates a new CUDA module and loads a string, `nvrtcProgram`, or a binary `data`."
   ([]
-   (CUmodule.))
+   (SafeCUmodule.))
   ([data]
-   (load! (CUmodule.) data))
+   (load! (SafeCUmodule.) data))
   ([data options]
-   (load! (CUmodule.) data options)))
+   (load! (SafeCUmodule.) data options)))
 
 (defrecord GridDim [^long grid-x ^long grid-y ^long grid-z ^long block-x ^long block-y ^long block-z])
 
@@ -761,7 +793,7 @@
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
   [^CUmodule m name]
-  (let [res (CUdeviceptr.)
+  (let [res (SafeCUdeviceptr.)
         byte-size (long-array 1)]
     (with-check
       (JCudaDriver/cuModuleGetGlobal res byte-size m name)
@@ -839,10 +871,10 @@
   See [cuStreamCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
   "
   ([^long flag]
-   (let [res (CUstream.)]
+   (let [res (SafeCUstream.)]
      (with-check (JCudaDriver/cuStreamCreate res flag) res)))
   ([^long priority ^long flag]
-   (let [res (CUstream.)]
+   (let [res (SafeCUstream.)]
      (with-check (JCudaDriver/cuStreamCreateWithPriority res flag priority) res))))
 
 (defn stream
@@ -919,7 +951,7 @@
   See [cuEventCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
   [^long flags]
-  (let [res (CUevent.)]
+  (let [res (SafeCUevent.)]
     (with-check (JCudaDriver/cuEventCreate res flags) res)))
 
 (defn event

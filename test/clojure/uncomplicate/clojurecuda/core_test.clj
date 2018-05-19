@@ -48,7 +48,9 @@
          (current-context) => ctx2
          (do (pop-context!) (current-context)) => ctx1
          (current-context! ctx2) => ctx2
-         (current-context) => ctx2)))))
+         (current-context) => ctx2
+         (release ctx2) => true
+         (release ctx2) => true)))))
 
 ;; =============== Module Management & Execution Control Tests =====================================
 
@@ -106,7 +108,16 @@
      (memcpy! cuda1 cuda2) => cuda2
      (memcpy-host! cuda2 host2 strm) => host2
      (synchronize! strm)
-     (.getFloat ^ByteBuffer host2 0) => 173.0)))
+     (.getFloat ^ByteBuffer host2 0) => 173.0))
+
+  (facts
+   "Stream and memory release."
+   (with-release [strm (stream :non-blocking)
+                  cuda (mem-alloc Float/BYTES)]
+     (release strm) => true
+     (release strm) => true
+     (release cuda) => true
+     (release cuda) => true)))
 
 (with-context (context (device 0) :map-host)
 

@@ -18,7 +18,8 @@
              [utils :refer [with-check maybe]]])
   (:import jcuda.Pointer
            [jcuda.driver JCudaDriver CUdevice CUdevice_attribute CUcontext CUlimit CUstream
-            CUfunction CUfunction_attribute]))
+            CUfunction CUfunction_attribute]
+           uncomplicate.clojurecuda.internal.SafeCUcontext))
 
 ;; =================== Info* utility macros ===============================
 
@@ -481,7 +482,7 @@
    (let [res (int-array 1)]
      (with-check (JCudaDriver/cuCtxGetApiVersion ctx res) (aget res 0))))
   ([]
-   (let [ctx (CUcontext.)]
+   (let [ctx (SafeCUcontext.)]
      (api-version (with-check (JCudaDriver/cuCtxGetCurrent ctx) ctx)))))
 
 (defn cache-config
