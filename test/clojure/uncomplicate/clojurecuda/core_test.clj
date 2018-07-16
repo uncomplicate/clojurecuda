@@ -230,10 +230,16 @@
 
 (facts
  "Peer access tests"
- (let [dev (device)]
-   (let [ctx (context dev)]
-     (with-context ctx
-       (when (can-access-peer dev dev)
-         (enable-peer-access!) => ctx
-         (disable-peer-access!) => ctx)
-       (p2p-attribute dev dev :access-supported) => (throws UnsupportedOperationException)))))
+ (let [num-dev (device-count)
+       dev (device)
+       ctx (context dev)]
+   (with-context ctx
+     (if (< 1 num-dev)
+       (let [dev1 (device 1)]
+         (p2p-attribute dev dev1 :access-supported) => false
+         (can-access-peer dev dev1) => false
+         (enable-peer-access!)
+         => (if (p2p-attribute dev dev1 :access-supported) ctx (throws ExceptionInfo)))
+       (do
+         (p2p-attribute dev dev :access-supported) => (throws ExceptionInfo)
+         (can-access-peer dev dev) => false)))))

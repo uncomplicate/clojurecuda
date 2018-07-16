@@ -37,7 +37,7 @@
            reduction-params (if (instance? pointer-arr-class reduction-params)
                               reduction-params
                               (apply parameters Integer/MAX_VALUE Integer/MAX_VALUE reduction-params))]
-       (if (or (< 1 ^long local-n) (<= ^long local-n ^long n))
+       (if (or (< 1 (long local-n)) (<= (long local-n) (long n)))
          (loop [hstream (launch! main-kernel (grid-2d m n local-m local-n) hstream main-params)
                 global-size (blocks-count local-n n)]
            (if (= 1 global-size)

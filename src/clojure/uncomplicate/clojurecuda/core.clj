@@ -231,17 +231,17 @@
 
   See [cuMemcpy](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)"
   ([src dst]
-   (memcpy! src dst (min ^long (size src) ^long (size dst))))
+   (memcpy! src dst (min (long (size src)) (long (size dst)))))
   ([src dst count-or-stream]
    (if (number? count-or-stream)
      (with-check (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) count-or-stream) dst)
-     (memcpy! src dst (min ^long (size src) ^long (size dst)) count-or-stream)))
+     (memcpy! src dst (min (long (size src)) (long (size dst))) count-or-stream)))
   ([src dst src-offset dst-offset count-or-stream]
    (if (number? count-or-stream)
      (with-check (JCudaDriver/cuMemcpy (with-offset (cu-ptr dst) dst-offset)
                                        (with-offset (cu-ptr src) src-offset) count-or-stream)
        dst)
-     (memcpy! src dst src-offset dst-offset (min ^long (size src) ^long (size dst)) count-or-stream)))
+     (memcpy! src dst src-offset dst-offset (min (long (size src)) (long (size dst))) count-or-stream)))
   ([src dst ^long byte-count hstream]
    (with-check (JCudaDriver/cuMemcpyAsync (cu-ptr dst) (cu-ptr src) byte-count hstream) dst))
   ([src dst src-offset dst-offset byte-count hstream]
@@ -263,9 +263,9 @@
   ([src dst arg]
    (if (integer? arg)
      (memcpy-host* src dst arg)
-     (memcpy-host* src dst (min ^long (size src) ^long (size dst)) arg)))
+     (memcpy-host* src dst (min (long (size src)) (long (size dst))) arg)))
   ([src dst]
-   (memcpy-host* src dst (min ^long (size src) ^long (size dst)))))
+   (memcpy-host* src dst (min (long (size src)) (long (size dst))))))
 
 (defn memset!
   "Sets `len` or all 32-bit segments of `cu-mem` to 32-bit integer `value`. If `hstream` is
@@ -274,11 +274,11 @@
   See [cuMemset32D](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([cu-mem ^long value]
-   (memset! cu-mem value ^long (/ ^long (size cu-mem) Integer/BYTES)))
+   (memset! cu-mem value (long (/ (long (size cu-mem)) Integer/BYTES))))
   ([cu-mem ^long value arg]
    (if (integer? arg)
      (with-check (JCudaDriver/cuMemsetD32 (cu-ptr cu-mem) value arg) cu-mem)
-     (memset! cu-mem value (/ ^long (size cu-mem) Integer/BYTES) arg)))
+     (memset! cu-mem value (/ (long (size cu-mem)) Integer/BYTES) arg)))
   ([cu-mem ^long value ^long len hstream]
    (if hstream
      (with-check (JCudaDriver/cuMemsetD32Async (cu-ptr cu-mem) value len hstream) cu-mem)
@@ -326,7 +326,7 @@
   "Creates a [[CULinearMemory]] that references a sub-region of `mem` from origin to len."
   [mem ^long origin ^long byte-count]
   (let [origin (max 0 origin)
-        byte-count (min byte-count (- ^long (size mem) origin))])
+        byte-count (min byte-count (- (long (size mem)) origin))])
   (cu-linear-memory (with-offset (cu-ptr mem) origin) byte-count false))
 
 (defn mem-alloc-managed*
@@ -781,9 +781,9 @@
          block-z (min dim-z (long (/ 1024 (* block-x block-y))))]
      (grid-3d dim-x dim-y dim-z block-x block-y block-z)))
   ([dim-x dim-y dim-z block-x block-y block-z]
-   (let [block-x (min ^long dim-x ^long block-x)
-         block-y (min ^long dim-y ^long block-y)
-         block-z (min ^long dim-z ^long block-z)]
+   (let [block-x (min (long dim-x) (long block-x))
+         block-y (min (long dim-y) (long block-y))
+         block-z (min (long dim-z) (long block-z))]
      (GridDim. (blocks-count block-x dim-x) (blocks-count block-y dim-y)
                (blocks-count block-z dim-z) block-x block-y block-z))))
 
@@ -814,8 +814,8 @@
 (defn set-parameters!
   "TODO"
   [^"[Ljcuda.Pointer;" arr i parameter & parameters]
-  (aset arr ^long i (ptr parameter))
-  (loop [i (inc ^long i) parameters parameters]
+  (aset arr (long i) (ptr parameter))
+  (loop [i (inc (long i)) parameters parameters]
     (if parameters
       (do
         (aset arr i (ptr (first parameters)))
