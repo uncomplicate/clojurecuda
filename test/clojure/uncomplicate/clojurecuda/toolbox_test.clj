@@ -8,14 +8,13 @@
 
 (ns uncomplicate.clojurecuda.toolbox-test
   (:require [midje.sweet :refer [facts => roughly]]
-            [uncomplicate.commons.core :refer [release with-release]]
+            [uncomplicate.commons
+             [core :refer [release with-release]]
+             [utils :refer [direct-buffer put-float]]]
             [uncomplicate.clojurecuda
              [core :refer :all]
-             [nvrtc :refer [compile! program]]
              [info :refer :all]
-             [toolbox :refer :all]])
-  (:import clojure.lang.ExceptionInfo
-           [java.nio ByteBuffer ByteOrder]))
+             [toolbox :refer :all]]))
 
 (init)
 
@@ -32,10 +31,9 @@
                                   ["-DREAL=float" "-DACCUMULATOR=double" "-arch=compute_30"
                                    (format "-DWGS=%d" wgs)])
                    modl (module prog)
-                   data (let [d (ByteBuffer/allocateDirect (* cnt Float/BYTES))]
-                          (.order  d (ByteOrder/nativeOrder))
+                   data (let [d (direct-buffer (* cnt Float/BYTES))]
                           (dotimes [n cnt]
-                            (.putFloat ^ByteBuffer d (* n Float/BYTES) (float n)))
+                            (put-float d n (float n)))
                           d)
                    cu-data (mem-alloc (* cnt Float/BYTES))
                    sum-reduction-horizontal (function modl "sum_reduction_horizontal")

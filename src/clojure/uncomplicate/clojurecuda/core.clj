@@ -14,103 +14,21 @@
   Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
-             [core :refer [Releaseable with-release release info
-                           wrap-float wrap-double wrap-long wrap-int]]
-             [utils :refer [mask]]]
-            [uncomplicate.clojurecuda
+             [core :refer [with-release info wrap extract]]
+             [utils :refer [mask dragan-says-ex]]]
+            [uncomplicate.clojurecuda.internal
              [protocols :refer :all]
              [constants :refer :all]
-             [info :refer [api-version cache-config limit* ctx-device]]
-             [utils :refer [with-check]]]
-            [clojure.string :as str]
-            [clojure.core.async :refer [go >!]])
-  (:import [jcuda Pointer NativePointerObject JCudaAccessor]
-           [jcuda.driver JCudaDriver CUdevice CUcontext CUdeviceptr CUmemAttach_flags CUmodule
-            CUfunction CUstream CUstream_flags CUresult CUstreamCallback CUevent CUevent_flags
-            JITOptions CUlinkState]
-           [jcuda.nvrtc JNvrtc nvrtcProgram nvrtcResult]
-           [java.nio ByteBuffer ByteOrder]
-           java.nio.file.Path java.util.Arrays java.io.File
-           [uncomplicate.clojurecuda.internal CUReleaseable SafeCUcontext SafeCUdeviceptr
-            SafeCUmodule SafeCUlinkState SafeCUstream SafeCUevent]))
-
-;; ==================== Release resources =======================
-
-(extend-type CUcontext
-  Releaseable
-  (release [c]
-    (with-check (JCudaDriver/cuCtxDestroy c) true)))
-
-(extend-type SafeCUcontext
-  Releaseable
-  (release [c]
-    (with-check (.release c) true)))
-
-(extend-type Pointer
-  WithOffset
-  (with-offset [cu byte-offset]
-    (.withByteOffset cu byte-offset)))
-
-(extend-type CUdeviceptr
-  Releaseable
-  (release [dp]
-    (with-check (JCudaDriver/cuMemFree dp) true))
-  WithOffset
-  (with-offset [cu byte-offset]
-    (.withByteOffset ^CUdeviceptr cu ^long byte-offset)))
-
-(extend-type SafeCUdeviceptr
-  Releaseable
-  (release [c]
-    (with-check (.release c) true)))
-
-(extend-type CUmodule
-  Releaseable
-  (release [m]
-    (with-check (JCudaDriver/cuModuleUnload m) true)))
-
-(extend-type SafeCUmodule
-  Releaseable
-  (release [c]
-    (with-check (.release c) true)))
-
-(extend-type CUlinkState
-  Releaseable
-  (release [l]
-    (with-check (JCudaDriver/cuLinkDestroy l) true)))
-
-(extend-type SafeCUlinkState
-  Releaseable
-  (release [c]
-    (with-check (.release c) true)))
-
-(extend-type CUstream
-  Releaseable
-  (release [s]
-    (with-check (JCudaDriver/cuStreamDestroy s) true)))
-
-(extend-type SafeCUstream
-  Releaseable
-  (release [c]
-    (with-check (.release c) true)))
-
-(extend-type CUevent
-  Releaseable
-  (release [e]
-    (with-check (JCudaDriver/cuEventDestroy e) true)))
-
-(extend-type SafeCUevent
-  Releaseable
-  (release [c]
-    (with-check (.release c) true)))
+             [impl :refer :all]
+             [utils :refer [with-check]]])
+  (:import jcuda.Pointer
+           [jcuda.driver JCudaDriver CUdevice CUdeviceptr CUmemAttach_flags CUmodule
+            CUfunction CUstream CUstream_flags CUevent_flags CUlinkState]))
 
 (defn init
   "Initializes the CUDA driver."
   []
   (with-check (JCudaDriver/cuInit 0) true))
-
-(defn null-pointer? [npo]
-  (JCudaAccessor/isNullPointer npo))
 
 ;; ================== Device Management ====================================
 
@@ -135,16 +53,6 @@
 
 ;; =================== Context Management ==================================
 
-(defn context*
-  "Creates a CUDA context on the `device` using a raw integer `flag`.
-  For available flags, see [[constants/ctx-flags]].
-  "
-  [dev ^long flags]
-  (let [res (SafeCUcontext.)]
-    (with-check (JCudaDriver/cuCtxCreate res flags dev)
-      {:dev (info dev) :flags flags}
-      res)))
-
 (defn context
   "Creates a CUDA context on the `device` using a keyword `flag`.
 
@@ -155,10 +63,10 @@
   Also see [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   ([dev flag]
-   (context* dev (or (ctx-flags flag)
-                     (throw (ex-info "Unknown context flag." {:flag flag :available ctx-flags})))))
+   (wrap (context* dev (or (ctx-flags flag) (dragan-says-ex "Unknown context flag."
+                                                            {:flag flag :available ctx-flags})))))
   ([dev]
-   (context* dev 0)))
+   (wrap (context* dev 0))))
 
 (defn current-context
   "Returns the CUDA context bound to the calling CPU thread.
@@ -166,8 +74,7 @@
   See [cuCtxGetCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   "
   []
-  (let [ctx (SafeCUcontext.)]
-    (with-check (JCudaDriver/cuCtxGetCurrent ctx) ctx)))
+  (wrap (current-context*)))
 
 (defn current-context!
   "Binds the specified CUDA context to the calling CPU thread.
@@ -175,7 +82,8 @@
   See [cuCtxSetCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   "
   [ctx]
-  (with-check (JCudaDriver/cuCtxSetCurrent ctx) ctx))
+  (current-context* (extract ctx))
+  ctx)
 
 (defn pop-context!
   "Pops the current CUDA context from the current CPU thread.
@@ -183,8 +91,7 @@
   See [cuCtxPopCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   "
   []
-  (let [ctx (SafeCUcontext.)]
-    (with-check (JCudaDriver/cuCtxPopCurrent ctx) ctx)))
+  (pop-context*))
 
 (defn push-context!
   "Pushes a context on the current CPU thread.
@@ -192,7 +99,8 @@
   See [cuCtxPushCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   "
   [ctx]
-  (with-check (JCudaDriver/cuCtxPushCurrent ctx) ctx))
+  (push-context* (extract ctx))
+  ctx)
 
 (defmacro in-context
   "Pushes the `ctx` to the top of the context stack, evaluates the body with `ctx` as the current context,
@@ -200,11 +108,11 @@
   Does NOT release the context.
   "
   [ctx & body]
-  `(let [ctx# ~ctx]
-     (push-context! ctx#)
+  `(let [ctx# (extract ~ctx)]
+     (push-context* ctx#)
      (try
        ~@body
-       (finally (pop-context!)))))
+       (finally (pop-context*)))))
 
 (defmacro with-context
   "Pushes the `context` to the top of the context stack, evaluates the body, and pops the context from the stack.
@@ -234,36 +142,38 @@
    (memcpy! src dst (min (long (size src)) (long (size dst)))))
   ([src dst count-or-stream]
    (if (number? count-or-stream)
-     (with-check (JCudaDriver/cuMemcpy (cu-ptr dst) (cu-ptr src) count-or-stream) dst)
+     (with-check (JCudaDriver/cuMemcpy (extract dst) (extract src) count-or-stream) dst)
      (memcpy! src dst (min (long (size src)) (long (size dst))) count-or-stream)))
   ([src dst src-offset dst-offset count-or-stream]
    (if (number? count-or-stream)
-     (with-check (JCudaDriver/cuMemcpy (with-offset (cu-ptr dst) dst-offset)
-                                       (with-offset (cu-ptr src) src-offset) count-or-stream)
+     (with-check
+       (JCudaDriver/cuMemcpy (with-offset (extract dst) dst-offset)
+                             (with-offset (extract src) src-offset) count-or-stream)
        dst)
      (memcpy! src dst src-offset dst-offset (min (long (size src)) (long (size dst))) count-or-stream)))
   ([src dst ^long byte-count hstream]
-   (with-check (JCudaDriver/cuMemcpyAsync (cu-ptr dst) (cu-ptr src) byte-count hstream) dst))
+   (with-check (JCudaDriver/cuMemcpyAsync (extract dst) (extract src) byte-count (extract hstream)) dst))
   ([src dst src-offset dst-offset byte-count hstream]
-   (with-check (JCudaDriver/cuMemcpyAsync (with-offset (cu-ptr dst) dst-offset)
-                                          (with-offset (cu-ptr src) src-offset) byte-count hstream)
+   (with-check
+     (JCudaDriver/cuMemcpyAsync (with-offset (extract dst) dst-offset)
+                                (with-offset (extract src) src-offset) byte-count (extract hstream))
      dst)))
 
 (defn memcpy-host!
   "Copies `byte-count` or all possible memory from `src` to `dst`, one of which
   has to be accessible from the host. If `hstream` is provided, the copy is asynchronous.
-  Polymorphic function that figures out what needs to be done.
+  A polymorphic function that figures out what needs to be done.
 
   See [cuMemcpyXtoY](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([src dst ^long byte-count hstream]
    (if hstream
-     (memcpy-host* src dst byte-count hstream)
+     (memcpy-host* src dst byte-count (extract hstream))
      (memcpy-host* src dst byte-count)))
   ([src dst arg]
    (if (integer? arg)
      (memcpy-host* src dst arg)
-     (memcpy-host* src dst (min (long (size src)) (long (size dst))) arg)))
+     (memcpy-host* src dst (min (long (size src)) (long (size dst))) (extract arg))))
   ([src dst]
    (memcpy-host* src dst (min (long (size src)) (long (size dst))))))
 
@@ -277,39 +187,14 @@
    (memset! cu-mem value (long (/ (long (size cu-mem)) Integer/BYTES))))
   ([cu-mem ^long value arg]
    (if (integer? arg)
-     (with-check (JCudaDriver/cuMemsetD32 (cu-ptr cu-mem) value arg) cu-mem)
+     (with-check (JCudaDriver/cuMemsetD32 (extract cu-mem) value arg) cu-mem)
      (memset! cu-mem value (/ (long (size cu-mem)) Integer/BYTES) arg)))
   ([cu-mem ^long value ^long len hstream]
    (if hstream
-     (with-check (JCudaDriver/cuMemsetD32Async (cu-ptr cu-mem) value len hstream) cu-mem)
+     (with-check (JCudaDriver/cuMemsetD32Async (extract cu-mem) value len (extract hstream)) cu-mem)
      (memset! cu-mem value len))))
 
 ;; ==================== Linear memory ================================================
-
-(deftype CULinearMemory [^CUdeviceptr cu ^Pointer p ^long s master]
-  Releaseable
-  (release [_]
-    (if master (release cu) true))
-  DeviceMem
-  (cu-ptr [_]
-    cu)
-  Mem
-  (ptr [_]
-    p)
-  (size [_]
-    s)
-  (memcpy-host* [this host byte-size]
-    (with-check (JCudaDriver/cuMemcpyDtoH (host-ptr host) cu byte-size) host))
-  (memcpy-host* [this host byte-size hstream]
-    (with-check (JCudaDriver/cuMemcpyDtoHAsync (host-ptr host) cu byte-size hstream) host)))
-
-(defn ^:private cu-linear-memory
-  ([^CUdeviceptr cu ^long size ^Boolean master]
-   (let [cu-arr (make-array CUdeviceptr 1)]
-     (aset ^"[Ljcuda.driver.CUdeviceptr;" cu-arr 0 cu)
-     (CULinearMemory. cu (Pointer/to ^"[Ljcuda.driver.CUdeviceptr;" cu-arr) size master)))
-  ([^CUdeviceptr cu ^long size]
-   (cu-linear-memory cu size true)))
 
 (defn mem-alloc
   "Allocates the `size` bytes of memory on the device. Returns a [[CULinearMemory]] object.
@@ -319,7 +204,7 @@
   See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   [^long size]
-  (let [cu (SafeCUdeviceptr.)]
+  (let [cu (CUdeviceptr.)]
     (with-check (JCudaDriver/cuMemAlloc cu size) (cu-linear-memory cu size))))
 
 (defn mem-sub-region
@@ -327,20 +212,7 @@
   [mem ^long origin ^long byte-count]
   (let [origin (max 0 origin)
         byte-count (min byte-count (- (long (size mem)) origin))])
-  (cu-linear-memory (with-offset (cu-ptr mem) origin) byte-count false))
-
-(defn mem-alloc-managed*
-  "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
-  system, specified by an integer `flag`.
-
-  Returns a [[CULinearmemory]] object.
-  The memory is not cleared. `size` must be greater than `0`.
-
-  See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
-  "
-  ([^long size ^long flag]
-   (let [cu (SafeCUdeviceptr.)]
-     (with-check (JCudaDriver/cuMemAllocManaged cu size flag) (cu-linear-memory cu size)))))
+  (cu-linear-memory (with-offset (extract mem) origin) byte-count false))
 
 (defn mem-alloc-managed
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
@@ -354,60 +226,12 @@
   "
   ([^long size flag]
    (mem-alloc-managed* size (or (mem-attach-flags flag)
-                                (throw (ex-info "Unknown mem-attach flag."
-                                                {:flag flag :available mem-attach-flags})))))
-  (^ByteBuffer [^long size]
+                                (dragan-says-ex "Unknown mem-attach flag."
+                                                {:flag flag :available mem-attach-flags}))))
+  ([^long size]
    (mem-alloc-managed* size CUmemAttach_flags/CU_MEM_ATTACH_GLOBAL)))
 
 ;; =================== Pinned Memory ================================================
-
-(defn ^:private free-pinned [hp buf]
-  (with-check (JCudaDriver/cuMemFreeHost hp) (release buf)))
-
-(defn ^:private unregister-pinned [hp _]
-  (with-check (JCudaDriver/cuMemHostUnregister hp) true))
-
-(deftype CUPinnedMemory [^CUdeviceptr cu ^Pointer p ^Pointer hp ^ByteBuffer buf ^long s release-fn]
-  Releaseable
-  (release [_]
-    (release-fn hp buf))
-  DeviceMem
-  (cu-ptr [_]
-    cu)
-  HostMem
-  (host-ptr [_]
-    hp)
-  (host-buffer [_]
-    buf)
-  Mem
-  (ptr [_]
-    p)
-  (size [_]
-    s)
-  (memcpy-host* [this host byte-size]
-    (with-check (JCudaDriver/cuMemcpyDtoH (host-ptr host) cu byte-size) host))
-  (memcpy-host* [this host byte-size hstream]
-    (with-check (JCudaDriver/cuMemcpyDtoHAsync (host-ptr host) cu byte-size hstream) host)))
-
-(defn ^:private cu-pinned-memory [^Pointer hp ^long size release-fn]
-  (let [cu (SafeCUdeviceptr.)]
-    (with-check (JCudaDriver/cuMemHostGetDevicePointer cu hp 0)
-      (let [cu-arr (make-array CUdeviceptr 1)
-            buf (.order (.getByteBuffer hp 0 size) (ByteOrder/nativeOrder))]
-        (aset ^"[Ljcuda.driver.CUdeviceptr;" cu-arr 0 cu)
-        (CUPinnedMemory. cu (Pointer/to ^"[Ljcuda.driver.CUdeviceptr;" cu-arr) hp buf size release-fn)))))
-
-(defn mem-host-alloc*
-  "Allocates `size` bytes of page-locked, 'pinned' on the host, using raw integer `flags`.
-  For available flags, see [constants/mem-host-alloc-flags]
-
-  The memory is not cleared. `size` must be greater than `0`.
-
-  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
-  "
-  [^long size ^long flags]
-  (let [p (Pointer.)]
-    (with-check (JCudaDriver/cuMemHostAlloc p size flags) (cu-pinned-memory p size free-pinned))))
 
 (defn mem-host-alloc
   "Allocates `size` bytes of page-locked, 'pinned' on the host, using keyword `flags`.
@@ -435,19 +259,7 @@
   See [cuMemAllocHost](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   [^long size]
-  (let [p (Pointer.)]
-    (with-check (JCudaDriver/cuMemAllocHost p size) (cu-pinned-memory p size free-pinned))))
-
-(defn mem-host-register*
-  "Registers previously allocated Java `memory` structure and pins it, using raw integer `flags`.
-
-   See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
-  "
-  [memory ^long flags]
-  (let [p ^Pointer (ptr memory)
-        byte-size (size memory)]
-    (with-check (JCudaDriver/cuMemHostRegister p byte-size flags)
-      (cu-pinned-memory p byte-size unregister-pinned))))
+  (mem-alloc-host* size))
 
 (defn mem-host-register
   "Registers previously allocated Java `memory` structure and pins it, using keyword `flags`.
@@ -466,236 +278,7 @@
   ([memory]
    (mem-host-register* memory 0)))
 
-;; =============== Host memory  =================================
-
-(extend-type Float
-  Mem
-  (ptr [this]
-    (ptr (wrap-float this)))
-  (size [this]
-    Float/BYTES))
-
-(extend-type Double
-  Mem
-  (ptr [this]
-    (ptr (wrap-double this)))
-  (size [this]
-    Double/BYTES))
-
-(extend-type Integer
-  Mem
-  (ptr [this]
-    (ptr (wrap-int this)))
-  (size [this]
-    Integer/BYTES))
-
-(extend-type Long
-  Mem
-  (ptr [this]
-    (ptr (wrap-long this)))
-  (size [this]
-    Long/BYTES))
-
-(extend-type (Class/forName "[F")
-  HostMem
-  (host-ptr [this]
-    (ptr this))
-  Mem
-  (ptr [this]
-    (Pointer/to ^floats this))
-  (size [this]
-    (* Float/BYTES (alength ^floats this)))
-  (memcpy-host*
-    ([this cu byte-size]
-     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
-    ([this cu byte-size hstream]
-     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
-
-(extend-type (Class/forName "[D")
-  HostMem
-  (host-ptr [this]
-    (ptr this))
-  Mem
-  (ptr [this]
-    (Pointer/to ^doubles this))
-  (size [this]
-    (* Double/BYTES (alength ^doubles this)))
-  (memcpy-host*
-    ([this cu byte-size]
-     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
-    ([this cu byte-size hstream]
-     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
-
-(extend-type (Class/forName "[I")
-  HostMem
-  (host-ptr [this]
-    (ptr this))
-  Mem
-  (ptr [this]
-    (Pointer/to ^ints this))
-  (size [this]
-    (* Integer/BYTES (alength ^ints this)))
-  (memcpy-host*
-    ([this cu byte-size]
-     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
-    ([this cu byte-size hstream]
-     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
-
-(extend-type (Class/forName "[J")
-  HostMem
-  (host-ptr [this]
-    (ptr this))
-  Mem
-  (ptr [this]
-    (Pointer/to ^longs this))
-  (size [this]
-    (* Long/BYTES (alength ^longs this)))
-  (memcpy-host*
-    ([this cu byte-size]
-     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
-    ([this cu byte-size hstream]
-     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
-
-(extend-type (Class/forName "[B")
-  HostMem
-  (host-ptr [this]
-    (ptr this))
-  Mem
-  (ptr [this]
-    (Pointer/to ^bytes this))
-  (size [this]
-    (alength ^bytes this))
-  (memcpy-host*
-    ([this cu byte-size]
-     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
-    ([this cu byte-size hstream]
-     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
-
-(extend-type (Class/forName "[S")
-  HostMem
-  (hostptr [this]
-    (ptr this))
-  Mem
-  (ptr [this]
-    (Pointer/to ^shorts this))
-  (size [this]
-    (* Short/BYTES (alength ^shorts this)))
-  (memcpy-host*
-    ([this cu byte-size]
-     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
-    ([this cu byte-size hstream]
-     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
-
-(extend-type (Class/forName "[C")
-  HostMem
-  (host-ptr [this]
-    (ptr this))
-  Mem
-  (ptr [this]
-    (Pointer/to ^chars this))
-  (size [this]
-    (* Character/BYTES (alength ^chars this)))
-  (memcpy-host*
-    ([this cu byte-size]
-     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
-    ([this cu byte-size hstream]
-     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
-
-(extend-type ByteBuffer
-  HostMem
-  (host-ptr [this]
-    (ptr this))
-  Mem
-  (ptr [this]
-    (Pointer/toBuffer this))
-  (size [this]
-    (.capacity ^ByteBuffer this))
-  (memcpy-host*
-    ([this cu byte-size]
-     (with-check (JCudaDriver/cuMemcpyHtoD (cu-ptr cu) (ptr this) byte-size) cu))
-    ([this cu byte-size hstream]
-     (with-check (JCudaDriver/cuMemcpyHtoDAsync (cu-ptr cu) (ptr this) byte-size hstream) cu))))
-
 ;; ================== Module Management =====================================
-
-(extend-protocol JITOption
-  Integer
-  (put-jit-option [value option options]
-    (.putInt ^JITOptions options option value))
-  Long
-  (put-jit-option [value option options]
-    (.putInt ^JITOptions options option value))
-  Float
-  (put-jit-option [value option options]
-    (.putFloat ^JITOptions options option value))
-  Double
-  (put-jit-option [value option options]
-    (.putFloat ^JITOptions options option value))
-  nil
-  (put-jit-option [value option options]
-    (.put ^JITOptions options option)))
-
-(defn ^:private enc-jit-options [options]
-  (let [res (JITOptions.)]
-    (doseq [[option value] options]
-      (put-jit-option value
-                      (or (jit-options option)
-                          (throw (ex-info "Unknown jit option." {:option option :available jit-options})))
-                      res))
-    res))
-
-(extend-type (Class/forName "[B")
-  ModuleLoad
-  (module-load [binary m]
-    (with-check (JCudaDriver/cuModuleLoadFatBinary ^CUmodule m ^bytes binary) {:module m} m))
-  JITOption
-  (put-jit-option [value option options]
-    (.putBytes ^JITOptions options option value)))
-
-(defn link-add-data! [link-state type data name options]
-  (let [type (or (jit-input-types type)
-                 (throw (ex-info "Invalid jit input type." {:type type :available jit-input-types})))]
-    (with-check (JCudaDriver/cuLinkAddData ^CUlinkState link-state type (ptr data) (size data) name
-                                           (enc-jit-options options))
-      {:data data}
-      link-state)))
-
-(extend-type String
-  ModuleLoad
-  (module-load [data m]
-    (with-check (JCudaDriver/cuModuleLoadData ^CUmodule m data) {:data data} m))
-  (link-add [data link-state type options]
-    (let [data-bytes (.getBytes data)
-          data-image (Arrays/copyOf data-bytes (inc (alength data-bytes)))]
-      (link-add-data! link-state type data-image "unnamed" options))))
-
-(extend-type Pointer
-  ModuleLoad
-  (module-load [data m]
-    (with-check (JCudaDriver/cuModuleLoadDataJIT ^CUmodule m data (enc-jit-options {})) {:data data} m)))
-
-(defn link-add-file! [link-state type file-name options]
-  (let [type (or (jit-input-types type)
-                 (throw (ex-info "Invalid jit input type." {:type type :available jit-input-types})))]
-    (with-check (JCudaDriver/cuLinkAddFile ^CUlinkState link-state type file-name (enc-jit-options options))
-      {:file file-name}
-      link-state)))
-
-(extend-type Path
-  ModuleLoad
-  (module-load [file-path m]
-    (let [file-name (.toString file-path)]
-      (with-check (JCudaDriver/cuModuleLoad ^CUmodule m file-name) {:file file-name} m)))
-  (link-add [file-path link-state type options]
-    (link-add-file! link-state type (.toString file-path) options)))
-
-(extend-type File
-  ModuleLoad
-  (module-load [file m]
-    (let [file-name (.toString file)]
-      (with-check (JCudaDriver/cuModuleLoad ^CUmodule m file-name) {:file file-name} m)))
-  (link-add [file link-state type options]
-    (link-add-file! link-state type (.toString file) options)))
 
 (defn link
   "Invokes CUDA linker on data provided as a vector `[[type source <options> <name>], ...]`.
@@ -705,17 +288,15 @@
   related `likadd` functions.
   "
   ([data options]
-   (let [link-state (SafeCUlinkState.)
-         cubin-image (Pointer.)]
-     (with-check (JCudaDriver/cuLinkCreate (enc-jit-options options) link-state)
-       (do
-         (doseq [[type d options name] data]
-           (if name
-             (link-add-data! link-state type d name options)
-             (link-add d link-state type options)))
-         (with-check (JCudaDriver/cuLinkComplete link-state cubin-image (long-array 1)) cubin-image)))))
+   (wrap (link* (CUlinkState.) data options)))
   ([data]
-   (link data nil)))
+   (link data nil))
+  ([]
+   (wrap (CUlinkState.))))
+
+(defn link-complete
+  [link-state]
+  (link-complete* (extract link-state)))
 
 (defn load!
   "Load a module's data from a [[ntrtc/ptx]] string, `nvrtcProgram`, java path, or a binary `data`,
@@ -723,21 +304,21 @@
 
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
-  ([^CUmodule m data]
-   (module-load data m))
-  ([^CUmodule m ^Pointer data options]
-   (with-check (JCudaDriver/cuModuleLoadDataJIT ^CUmodule m data (enc-jit-options options))
-     {:data data :options options}
-     m)))
+  ([m data]
+   (module-load data (extract m))
+   m)
+  ([m data options]
+   (module-load-data-jit* (extract m) data (enc-jit-options options))
+   m))
 
 (defn module
   "Creates a new CUDA module and loads a string, `nvrtcProgram`, or a binary `data`."
   ([]
-   (SafeCUmodule.))
+   (wrap (CUmodule.)))
   ([data]
-   (load! (SafeCUmodule.) data))
+   (load! (module) data))
   ([data options]
-   (load! (SafeCUmodule.) data options)))
+   (load! (module) data options)))
 
 (defrecord GridDim [^long grid-x ^long grid-y ^long grid-z ^long block-x ^long block-y ^long block-z])
 
@@ -792,13 +373,8 @@
 
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
-  [^CUmodule m name]
-  (let [res (SafeCUdeviceptr.)
-        byte-size (long-array 1)]
-    (with-check
-      (JCudaDriver/cuModuleGetGlobal res byte-size m name)
-      {:name name}
-      (cu-linear-memory res (aget byte-size 0) false))))
+  [m name]
+  (global* (extract m) name))
 
 (defn make-parameters
   "TODO"
@@ -841,7 +417,7 @@
   "
   [m name]
   (let [res (CUfunction.)]
-    (with-check (JCudaDriver/cuModuleGetFunction res m name) {:name name} res)))
+    (with-check (JCudaDriver/cuModuleGetFunction res (extract m) name) {:name name} res)))
 
 (defn launch!
   "Invokes the kernel `fun` on a grid-dim grid of blocks, using parameters `params`.
@@ -865,18 +441,6 @@
 
 ;; ================== Stream Management ======================================
 
-(defn stream*
-  "Create a stream using an optional `priority` and an integer `flag`.
-
-  See [cuStreamCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
-  "
-  ([^long flag]
-   (let [res (SafeCUstream.)]
-     (with-check (JCudaDriver/cuStreamCreate res flag) res)))
-  ([^long priority ^long flag]
-   (let [res (SafeCUstream.)]
-     (with-check (JCudaDriver/cuStreamCreateWithPriority res flag priority) res))))
-
 (defn stream
   "Create a stream using an optional integer `priority` and a keyword `flag`.
 
@@ -885,13 +449,14 @@
   See [cuStreamCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
   "
   ([]
-   (stream* CUstream_flags/CU_STREAM_DEFAULT))
+   (wrap (stream* CUstream_flags/CU_STREAM_DEFAULT)))
   ([flag]
-   (stream* (or (stream-flags flag)
-                (throw (ex-info "Invalid stream flag." {:flag flag :available stream-flags})))))
+   (wrap (stream* (or (stream-flags flag)
+                      (dragan-says-ex "Invalid stream flag." {:flag flag :available stream-flags})))))
   ([^long priority flag]
-   (stream* priority (or (stream-flags flag)
-                         (throw (ex-info "Invaling stream flag." {:flag flag :available stream-flags}))))))
+   (wrap (stream* priority (or (stream-flags flag)
+                               (dragan-says-ex "Invaling stream flag."
+                                               {:flag flag :available stream-flags}))))))
 
 (def ^{:constant true
        :doc "The default per-thread stream"}
@@ -904,55 +469,41 @@
   and [cuEventQuery](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
 "
   [obj]
-  (= CUresult/CUDA_SUCCESS (if (instance? CUstream obj)
-                             (JCudaDriver/cuStreamQuery obj)
-                             (JCudaDriver/cuEventQuery obj))))
+  (ready* (extract obj)))
 
 (defn synchronize!
   "Block for the current context's or `stream`'s tasks to complete."
   ([]
-   (with-check (JCudaDriver/cuCtxSynchronize) true))
+   (synchronize*))
   ([hstream]
-   (with-check (JCudaDriver/cuStreamSynchronize hstream) hstream)))
-
-(defrecord StreamCallbackInfo [^CUstream stream status data])
-
-(deftype StreamCallback [ch]
-  CUstreamCallback
-  (call [this hstream status data]
-    (go (>! ch (->StreamCallbackInfo hstream (CUresult/stringFor status) data)))))
+   (synchronize* (extract hstream))
+   hstream))
 
 (defn callback
   "Creates a [[StreamCallback]] that writes [[StreamCallbackInfo]] into async channel `ch`."
   [ch]
-  (StreamCallback. ch))
+  (->StreamCallback ch))
 
 (defn add-callback!
-  "Adds a [[StreamCallback]] to a compute stream, with optional `data` related to the call.
+  "Adds a [[callback]] to a compute stream, with optional `data` related to the call.
 
   See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
-  ([hstream ^StreamCallback callback data]
-   (with-check (JCudaDriver/cuStreamAddCallback hstream callback data 0) hstream))
-  ([hstream ^StreamCallback callback]
-   (with-check (JCudaDriver/cuStreamAddCallback hstream callback nil 0) hstream)))
+  ([hstream callback data]
+   (add-callback* (extract hstream) callback data)
+   hstream)
+  ([hstream callback]
+   (add-callback* (extract hstream) callback hstream)
+   hstream))
 
 (defn wait-event!
   "Make a compute stream `hstream` wait on an event `ev
 
   See [cuStreamWaitEvent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
   [hstream ev]
-  (with-check (JCudaDriver/cuStreamWaitEvent hstream ev 0) hstream))
+  (wait-event* (extract hstream) (extract ev))
+  hstream)
 
 ;; ================== Event Management =======================================
-
-(defn event*
-  "Creates an event specified by integer `flags`.
-
-  See [cuEventCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
-  "
-  [^long flags]
-  (let [res (SafeCUevent.)]
-    (with-check (JCudaDriver/cuEventCreate res flags) res)))
 
 (defn event
   "Creates an event specified by keyword `flags`.
@@ -962,12 +513,12 @@
   See [cuEventCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
   ([]
-   (event* CUevent_flags/CU_EVENT_DEFAULT))
+   (wrap (event* CUevent_flags/CU_EVENT_DEFAULT)))
   ([flag & flags]
-   (event* (if flags
-             (mask event-flags (cons flag flags))
-             (or (event-flags flag)
-                 (throw (ex-info "Unknown event flag." {:flag flag :available event-flags})))))))
+   (wrap (event* (if flags
+                   (mask event-flags (cons flag flags))
+                   (or (event-flags flag)
+                       (dragan-says-ex "Unknown event flag." {:flag flag :available event-flags})))))))
 
 (defn elapsed-time
   "Computes the elapsed time in milliseconds between `start-event` and `end-event`.
@@ -975,8 +526,7 @@
   See [cuEventElapsedTime](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
   ^double [start-event end-event]
-  (let [res (float-array 1)]
-    (with-check (JCudaDriver/cuEventElapsedTime res start-event end-event) (aget res 0))))
+  (elapsed-time* (extract start-event) (extract end-event)))
 
 (defn record!
   "Records an event `ev` on optional `stream`.
@@ -984,9 +534,10 @@
   See [cuEventRecord](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
   ([stream event]
-   (with-check (JCudaDriver/cuEventRecord event stream) stream))
+   (record* (extract stream) (extract event))
+   stream)
   ([event]
-   (with-check (JCudaDriver/cuEventRecord event nil) nil)))
+   (record* (extract event))))
 
 ;; ================== Peer Context Memory Access =============================
 
@@ -998,15 +549,6 @@
   [dev peer]
   (let [res (int-array 1)]
     (with-check (JCudaDriver/cuDeviceCanAccessPeer res dev peer) (pos? (aget res 0)))))
-
-(defn p2p-attribute*
-  "Queries attributes of the link between two devices.
-
-  See [cuDeviceGetP2PAttribute](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
-  "
-  [dev peer ^long attribute]
-  (let [res (int-array 1)]
-    (with-check (JCudaDriver/cuDeviceGetP2PAttribute res attribute dev peer) (pos? (aget res 0)))))
 
 (defn p2p-attribute
   "Queries attributes of the link between two devices.
@@ -1024,8 +566,8 @@
   See [cuCtxDisablePeerAccess](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
   "
   ([ctx]
-   (let [res (int-array 1)]
-     (with-check (JCudaDriver/cuCtxDisablePeerAccess ctx) ctx)))
+   (disable-peer-access* (extract ctx))
+   ctx)
   ([]
    (disable-peer-access! (current-context))))
 
@@ -1035,7 +577,37 @@
   See [cuCtxEnablePeerAccess](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
   "
   ([ctx]
-   (let [res (int-array 1)]
-     (with-check (JCudaDriver/cuCtxEnablePeerAccess ctx 0) ctx)))
+   (enable-peer-access* (extract ctx))
+   ctx)
   ([]
    (enable-peer-access! (current-context))))
+
+;; ====================== Nvrtc program JIT ========================================
+
+(defn program
+  "TODO"
+  ([name source-code headers]
+   (wrap (program* name source-code (into-array String (vals headers))
+                   (into-array String (keys headers)))))
+  ([source-code headers]
+   (program nil source-code headers))
+  ([source-code]
+   (program nil source-code nil)))
+
+(defn program-log
+  "TODO"
+  [prog]
+  (program-log* (extract prog)))
+
+(defn compile!
+  "TODO"
+  ([prog options]
+   (compile* (extract prog) (into-array String options))
+   prog)
+  ([prog]
+   (compile! prog nil)))
+
+(defn ptx
+  "TODO"
+  ^String [prog]
+  (ptx* (extract prog)))

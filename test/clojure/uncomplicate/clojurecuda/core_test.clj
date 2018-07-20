@@ -11,10 +11,9 @@
             [clojure.core.async :refer [chan <!!]]
             [uncomplicate.commons.core :refer [release with-release]]
             [uncomplicate.clojurecuda
-             [protocols :refer [size host-buffer]]
-             [info :refer [pci-bus-id-string]]
              [core :refer :all]
-             [nvrtc :refer [compile! program]]])
+             [info :refer [pci-bus-id-string]]]
+            [uncomplicate.clojurecuda.internal.protocols :refer [size host-buffer]])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 
@@ -37,7 +36,7 @@
 (facts
  "Context tests"
  (with-release [dev (device 0)]
-   (let [ctx (context* dev 0)]
+   (let [ctx (context dev :sched-auto)]
      ctx => truthy
      (release ctx) => true
      (context dev :unknown) => (throws ExceptionInfo))
@@ -117,6 +116,7 @@
      (release strm) => true
      (release strm) => true
      (release cuda) => true
+     (memcpy! cuda cuda) => (throws NullPointerException)
      (release cuda) => true)))
 
 (with-context (context (device 0) :map-host)
@@ -133,7 +133,7 @@
        (add-callback! strm cbk)
        (memcpy-host! host1 cuda1 strm) => cuda1
        (memcpy! cuda1 cuda2) => cuda2
-       (:stream (<!! ch)) => strm))))
+       (:data (<!! ch)) => strm))))
 
 ;; =============== Memory Management Tests ==============================================
 

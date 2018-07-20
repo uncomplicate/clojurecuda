@@ -9,9 +9,7 @@
 (ns uncomplicate.clojurecuda.examples.jcuda.vector-add-test
   (:require [midje.sweet :refer :all]
             [uncomplicate.commons.core :refer [release with-release]]
-            [uncomplicate.clojurecuda
-             [core :refer :all]
-             [nvrtc :refer :all]])
+            [uncomplicate.clojurecuda.core :refer :all])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 

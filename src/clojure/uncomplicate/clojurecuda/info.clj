@@ -12,14 +12,15 @@
   "
   (:require [clojure.string :as str]
             [uncomplicate.fluokitten.core :refer [fmap op]]
-            [uncomplicate.commons.core :refer [Info info]]
-            [uncomplicate.clojurecuda
+            [uncomplicate.commons.core :refer [Info info extract wrap extract]]
+            [uncomplicate.clojurecuda.internal
              [constants :refer :all]
-             [utils :refer [with-check maybe]]])
+             [utils :refer [with-check maybe]]
+             [impl :refer [current-context*]]])
   (:import jcuda.Pointer
            [jcuda.driver JCudaDriver CUdevice CUdevice_attribute CUcontext CUlimit CUstream
             CUfunction CUfunction_attribute]
-           uncomplicate.clojurecuda.internal.SafeCUcontext))
+           [uncomplicate.clojurecuda.internal.impl CUContext CUStream]))
 
 ;; =================== Info* utility macros ===============================
 
@@ -480,10 +481,10 @@
   "Gets the context's API version."
   ([ctx]
    (let [res (int-array 1)]
-     (with-check (JCudaDriver/cuCtxGetApiVersion ctx res) (aget res 0))))
+     (with-check (JCudaDriver/cuCtxGetApiVersion (extract ctx) res) (aget res 0))))
   ([]
-   (let [ctx (SafeCUcontext.)]
-     (api-version (with-check (JCudaDriver/cuCtxGetCurrent ctx) ctx)))))
+   (let [res (int-array 1)]
+     (with-check (JCudaDriver/cuCtxGetApiVersion (current-context*) res) (aget res 0)))))
 
 (defn cache-config
   "Returns the preferred cache configuration for the current context.
@@ -582,7 +583,7 @@
       [(aget least 0) (aget greatest 0)])))
 
 (defn context-info
-  "All info for the current context."
+  "All info of the current context."
   ([info-type]
    (maybe
     (case info-type
@@ -606,7 +607,8 @@
         :stream-priority-range (stream-priority-range)}
        (maybe (fmap limit* ctx-limits)))))
 
-(extend-type CUcontext
+;;TODO
+(extend-type CUContext
   Info
   (info
     ([ctx info-type]
@@ -621,13 +623,13 @@
 
 (defn stream-flag [hstream]
   (let [res (int-array 1)]
-    (with-check (JCudaDriver/cuStreamGetFlags hstream res) (aget ^ints res 0))))
+    (with-check (JCudaDriver/cuStreamGetFlags (extract  hstream) res) (aget ^ints res 0))))
 
 (defn stream-priority ^long [hstream]
   (let [res (int-array 1)]
-    (with-check (JCudaDriver/cuStreamGetPriority hstream res) (aget ^ints res 0))))
+    (with-check (JCudaDriver/cuStreamGetPriority (extract hstream) res) (aget ^ints res 0))))
 
-(extend-type CUstream
+(extend-type CUStream
   Info
   (info
     ([hstream info-type]

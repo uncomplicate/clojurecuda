@@ -11,11 +11,8 @@
             [uncomplicate.commons.core :refer [release with-release info]]
             [uncomplicate.clojurecuda
              [core :refer :all]
-             [constants :refer [stream-flags]]
-             [info :refer :all]
-             [nvrtc :refer [compile! program]]])
-  (:import clojure.lang.ExceptionInfo
-           [java.nio ByteBuffer ByteOrder]))
+             [info :refer :all]]
+            [uncomplicate.clojurecuda.internal.constants :refer [stream-flags]]))
 
 (init)
 

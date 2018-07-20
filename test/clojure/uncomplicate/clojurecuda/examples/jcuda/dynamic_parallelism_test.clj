@@ -10,9 +10,7 @@
   (:require [midje.sweet :refer :all]
             [clojure.java.io :as io]
             [uncomplicate.commons.core :refer [release with-release]]
-            [uncomplicate.clojurecuda
-             [core :refer :all]
-             [nvrtc :refer :all]])
+            [uncomplicate.clojurecuda.core :refer :all])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
 
@@ -28,7 +26,7 @@
                                    "-default-device"])
                    linked-prog (link [[:library (io/file "/usr/local/cuda/lib64/libcudadevrt.a")]
                                       [:ptx prog]])
-                   m (module linked-prog)
+                   m (module (link-complete linked-prog))
                    parent (function m "parentKernel")
                    data (mem-alloc (* Float/BYTES num-elements))]
       (facts

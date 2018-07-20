@@ -18,7 +18,11 @@ public class JCudaAccessor {
 
     public static int zeroHash = new ZeroPointer().hashCode();
 
-    public static boolean isNullPointer(NativePointerObject npo) {
+    public static boolean isNullPointer (NativePointerObject npo) {
         return zeroHash == npo.hashCode();
     }
+
+    public static long getNativePointer (NativePointerObject npo) {
+        return npo.getNativePointer();
+    };
 }

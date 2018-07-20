@@ -16,7 +16,7 @@
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.jcuda/jcuda "0.9.2"]
                  [org.clojure/core.async "0.4.474"]
-                 [uncomplicate/commons "0.5.0"]
+                 [uncomplicate/commons "0.6.0-SNAPSHOT"]
                  [uncomplicate/fluokitten "0.9.0-SNAPSHOT"]]
 
   :codox {:metadata {:doc/format :markdown}
