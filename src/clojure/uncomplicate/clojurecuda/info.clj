@@ -12,8 +12,9 @@
   "
   (:require [clojure.string :as str]
             [uncomplicate.fluokitten.core :refer [fmap op]]
-            [uncomplicate.commons.core :refer [Info info extract wrap extract]]
+            [uncomplicate.commons.core :refer [Info info]]
             [uncomplicate.clojurecuda.internal
+             [protocols :refer [wrap extract]]
              [constants :refer :all]
              [utils :refer [with-check maybe]]
              [impl :refer [current-context*]]])
@@ -582,42 +583,31 @@
     (with-check (JCudaDriver/cuCtxGetStreamPriorityRange least greatest)
       [(aget least 0) (aget greatest 0)])))
 
-(defn context-info
-  "All info of the current context."
-  ([info-type]
-   (maybe
-    (case info-type
-      :api-version (api-version)
-      :cache-config (cache-config)
-      :stack-size (limit* CUlimit/CU_LIMIT_STACK_SIZE)
-      :malloc-heap-size (limit* CUlimit/CU_LIMIT_MALLOC_HEAP_SIZE)
-      :printf-fifo-size (limit* CUlimit/CU_LIMIT_PRINTF_FIFO_SIZE)
-      :dev-runtime-sync-depth (limit* CUlimit/CU_LIMIT_DEV_RUNTIME_SYNC_DEPTH)
-      :dev-runtime-pending-launch-count (limit* CUlimit/CU_LIMIT_DEV_RUNTIME_PENDING_LAUNCH_COUNT)
-      :limits (fmap limit* ctx-limits)
-      :device (ctx-device)
-      :shared-config (shared-config)
-      :stream-priority-range (stream-priority-range)
-      nil)))
-  ([]
-   (op {:api-version (maybe (api-version))
-        :cache-config (maybe (cache-config))
-        :device (maybe (ctx-device))
-        :shared-config (shared-config)
-        :stream-priority-range (stream-priority-range)}
-       (maybe (fmap limit* ctx-limits)))))
-
-;;TODO
 (extend-type CUContext
   Info
   (info
     ([ctx info-type]
      (maybe
       (case info-type
-        :api-version (api-version ctx)
+        :api-version (api-version)
+        :cache-config (cache-config)
+        :stack-size (limit* CUlimit/CU_LIMIT_STACK_SIZE)
+        :malloc-heap-size (limit* CUlimit/CU_LIMIT_MALLOC_HEAP_SIZE)
+        :printf-fifo-size (limit* CUlimit/CU_LIMIT_PRINTF_FIFO_SIZE)
+        :dev-runtime-sync-depth (limit* CUlimit/CU_LIMIT_DEV_RUNTIME_SYNC_DEPTH)
+        :dev-runtime-pending-launch-count (limit* CUlimit/CU_LIMIT_DEV_RUNTIME_PENDING_LAUNCH_COUNT)
+        :limits (fmap limit* ctx-limits)
+        :device (ctx-device)
+        :shared-config (shared-config)
+        :stream-priority-range (stream-priority-range)
         nil)))
     ([ctx]
-     {:api-version (maybe (api-version ctx))})))
+     (op {:api-version (maybe (api-version))
+          :cache-config (maybe (cache-config))
+          :device (maybe (ctx-device))
+          :shared-config (shared-config)
+          :stream-priority-range (stream-priority-range)}
+         (maybe (fmap limit* ctx-limits))))))
 
 ;; =========================== Stream Management ================================
 

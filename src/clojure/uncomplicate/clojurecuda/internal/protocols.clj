@@ -9,6 +9,14 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.internal.protocols)
 
+;; =================== Object wrappers =================================
+
+(defprotocol Wrapper
+  (extract [this]))
+
+(defprotocol Wrappable
+  (wrap [this]))
+
 (defprotocol Mem
   "An object that represents memory that participates in CUDA operations.
   It can be on the device, or on the host.  Built-in implementations:
@@ -24,9 +32,9 @@
 (defprotocol JITOption
   (put-jit-option [value option options]))
 
-(defprotocol ModuleLoad ;;TODO add * to method names
-  (module-load [data m])
-  (link-add [data link-state type options]))
+(defprotocol ModuleLoad
+  (module-load* [data m])
+  (link-add* [data link-state type options]))
 
 (defprotocol WithOffset
   (with-offset [this ofst]))

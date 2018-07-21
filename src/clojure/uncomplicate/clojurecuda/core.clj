@@ -14,8 +14,8 @@
   Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
-             [core :refer [with-release info wrap extract]]
-             [utils :refer [mask dragan-says-ex]]]
+             [core :refer [with-release info]]
+             [utils :refer [mask]]]
             [uncomplicate.clojurecuda.internal
              [protocols :refer :all]
              [constants :refer :all]
@@ -63,8 +63,8 @@
   Also see [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   ([dev flag]
-   (wrap (context* dev (or (ctx-flags flag) (dragan-says-ex "Unknown context flag."
-                                                            {:flag flag :available ctx-flags})))))
+   (wrap (context* dev (or (ctx-flags flag) (throw (ex-info "Unknown context flag."
+                                                            {:flag flag :available ctx-flags}))))))
   ([dev]
    (wrap (context* dev 0))))
 
@@ -77,7 +77,7 @@
   (wrap (current-context*)))
 
 (defn current-context!
-  "Binds the specified CUDA context to the calling CPU thread.
+  "Binds the specified CUDA context `ctx` to the calling CPU thread.
 
   See [cuCtxSetCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   "
@@ -86,7 +86,7 @@
   ctx)
 
 (defn pop-context!
-  "Pops the current CUDA context from the current CPU thread.
+  "Pops the current CUDA context `ctx` from the current CPU thread.
 
   See [cuCtxPopCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   "
@@ -94,7 +94,7 @@
   (pop-context*))
 
 (defn push-context!
-  "Pushes a context on the current CPU thread.
+  "Pushes a context `ctx` on the current CPU thread.
 
   See [cuCtxPushCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
   "
@@ -103,9 +103,8 @@
   ctx)
 
 (defmacro in-context
-  "Pushes the `ctx` to the top of the context stack, evaluates the body with `ctx` as the current context,
-  and pops the context from the stack.
-  Does NOT release the context.
+  "Pushes the context `ctx` to the top of the context stack, evaluates the body with `ctx`
+  as the current context, and pops the context from the stack. Does NOT release the context.
   "
   [ctx & body]
   `(let [ctx# (extract ~ctx)]
@@ -115,16 +114,15 @@
        (finally (pop-context*)))))
 
 (defmacro with-context
-  "Pushes the `context` to the top of the context stack, evaluates the body, and pops the context from the stack.
-  Releases the context. Be careful! If you try to release a previously released context, JVM might crash!
+  "Pushes the context `ctx` to the top of the context stack, evaluates the body, and pops the context
+  from the stack. Releases the context.
   "
   [ctx & body]
   `(with-release [ctx# ~ctx]
      (in-context ctx# ~@body)))
 
 (defmacro with-default
-  "Creates the default context and executes the body in it.
-  "
+  "Initializes CUDA, creates the default context and executes the body in it."
   [& body]
   `(do
      (init)
@@ -147,16 +145,19 @@
   ([src dst src-offset dst-offset count-or-stream]
    (if (number? count-or-stream)
      (with-check
-       (JCudaDriver/cuMemcpy (with-offset (extract dst) dst-offset)
-                             (with-offset (extract src) src-offset) count-or-stream)
+       (JCudaDriver/cuMemcpy (with-offset dst dst-offset) (with-offset dst src-offset)
+                             count-or-stream)
        dst)
-     (memcpy! src dst src-offset dst-offset (min (long (size src)) (long (size dst))) count-or-stream)))
+     (memcpy! src dst src-offset dst-offset (min (long (size src)) (long (size dst)))
+              count-or-stream)))
   ([src dst ^long byte-count hstream]
-   (with-check (JCudaDriver/cuMemcpyAsync (extract dst) (extract src) byte-count (extract hstream)) dst))
+   (with-check
+     (JCudaDriver/cuMemcpyAsync (extract dst) (extract src) byte-count (extract hstream))
+     dst))
   ([src dst src-offset dst-offset byte-count hstream]
    (with-check
-     (JCudaDriver/cuMemcpyAsync (with-offset (extract dst) dst-offset)
-                                (with-offset (extract src) src-offset) byte-count (extract hstream))
+     (JCudaDriver/cuMemcpyAsync (with-offset dst dst-offset) (with-offset src src-offset)
+                                byte-count (extract hstream))
      dst)))
 
 (defn memcpy-host!
@@ -197,7 +198,7 @@
 ;; ==================== Linear memory ================================================
 
 (defn mem-alloc
-  "Allocates the `size` bytes of memory on the device. Returns a [[CULinearMemory]] object.
+  "Allocates the `size` bytes of memory on the device.
 
   The old memory content is not cleared. `size` must be greater than `0`.
 
@@ -212,7 +213,7 @@
   [mem ^long origin ^long byte-count]
   (let [origin (max 0 origin)
         byte-count (min byte-count (- (long (size mem)) origin))])
-  (cu-linear-memory (with-offset (extract mem) origin) byte-count false))
+  (cu-linear-memory (with-offset mem origin) byte-count false))
 
 (defn mem-alloc-managed
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
@@ -226,8 +227,8 @@
   "
   ([^long size flag]
    (mem-alloc-managed* size (or (mem-attach-flags flag)
-                                (dragan-says-ex "Unknown mem-attach flag."
-                                                {:flag flag :available mem-attach-flags}))))
+                                (throw (ex-info "Unknown mem-attach flag."
+                                                {:flag flag :available mem-attach-flags})))))
   ([^long size]
    (mem-alloc-managed* size CUmemAttach_flags/CU_MEM_ATTACH_GLOBAL)))
 
@@ -299,20 +300,20 @@
   (link-complete* (extract link-state)))
 
 (defn load!
-  "Load a module's data from a [[ntrtc/ptx]] string, `nvrtcProgram`, java path, or a binary `data`,
+  "Load a module's data from a [[ptx]] string, `nvrtcProgram`, java path, or a binary `data`,
   for already existing module.
 
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
   ([m data]
-   (module-load data (extract m))
+   (module-load* data (extract m))
    m)
   ([m data options]
    (module-load-data-jit* (extract m) data (enc-jit-options options))
    m))
 
 (defn module
-  "Creates a new CUDA module and loads a string, `nvrtcProgram`, or a binary `data`."
+  "Creates a new CUDA module and loads a string, nvrtc program, or binary `data`."
   ([]
    (wrap (CUmodule.)))
   ([data]
@@ -369,7 +370,7 @@
                (blocks-count block-z dim-z) block-x block-y block-z))))
 
 (defn global
-  "Returns CUDA global `CULinearMemory` named `name` from module `m`, with optionally specified size..
+  "Returns CUDA global linear memory named `name` from module `m`, with optionally specified size.
 
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
@@ -377,18 +378,18 @@
   (global* (extract m) name))
 
 (defn make-parameters
-  "TODO"
+  "Creates an array of JCuda `Pointer`s."
   [^long len]
   (make-array Pointer len))
 
 (defn set-parameter!
-  "TODO"
+  "Sets the `i`th parameter in a parameter array `arr`"
   [^"[Ljcuda.Pointer;" arr ^long i parameter]
   (aset arr i (ptr parameter))
   arr)
 
 (defn set-parameters!
-  "TODO"
+  "Sets the `i`th parameter in a parameter array `arr` and the rest of `parameters` in places after `i`."
   [^"[Ljcuda.Pointer;" arr i parameter & parameters]
   (aset arr (long i) (ptr parameter))
   (loop [i (inc (long i)) parameters parameters]
@@ -411,7 +412,7 @@
 ;; ====================== Execution Control ==================================
 
 (defn function
-  "Returns CUDA kernel function named `name` from module `m`.
+  "Returns CUDA kernel function named `name` located in module `m`.
 
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
@@ -452,22 +453,22 @@
    (wrap (stream* CUstream_flags/CU_STREAM_DEFAULT)))
   ([flag]
    (wrap (stream* (or (stream-flags flag)
-                      (dragan-says-ex "Invalid stream flag." {:flag flag :available stream-flags})))))
+                      (throw (ex-info "Invalid stream flag." {:flag flag :available stream-flags}))))))
   ([^long priority flag]
    (wrap (stream* priority (or (stream-flags flag)
-                               (dragan-says-ex "Invaling stream flag."
-                                               {:flag flag :available stream-flags}))))))
+                               (throw (ex-info  "Invaling stream flag."
+                                                {:flag flag :available stream-flags})))))))
 
 (def ^{:constant true
        :doc "The default per-thread stream"}
   default-stream JCudaDriver/CU_STREAM_PER_THREAD)
 
 (defn ready?
-  "Determine status (ready or not) of a compute stream or event.
+  "Determines status (ready or not) of a compute stream or event `obj`.
 
   See [cuStreamQuery](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html),
   and [cuEventQuery](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
-"
+  "
   [obj]
   (ready* (extract obj)))
 
@@ -480,12 +481,14 @@
    hstream))
 
 (defn callback
-  "Creates a [[StreamCallback]] that writes [[StreamCallbackInfo]] into async channel `ch`."
+  "Creates a stream callback that writes stream callback info into async channel `ch`.
+  Available keys in callback info are `:status` and `:data`."
   [ch]
   (->StreamCallback ch))
 
 (defn add-callback!
   "Adds a [[callback]] to a compute stream, with optional `data` related to the call.
+  If `data` is not provided, places `hstream` under data.
 
   See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
   ([hstream callback data]
@@ -496,7 +499,7 @@
    hstream))
 
 (defn wait-event!
-  "Make a compute stream `hstream` wait on an event `ev
+  "Makes a compute stream `hstream` wait on an event `ev`.
 
   See [cuStreamWaitEvent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
   [hstream ev]
@@ -518,7 +521,7 @@
    (wrap (event* (if flags
                    (mask event-flags (cons flag flags))
                    (or (event-flags flag)
-                       (dragan-says-ex "Unknown event flag." {:flag flag :available event-flags})))))))
+                       (throw (ex-info  "Unknown event flag." {:flag flag :available event-flags}))))))))
 
 (defn elapsed-time
   "Computes the elapsed time in milliseconds between `start-event` and `end-event`.
@@ -561,7 +564,8 @@
                                                {:attribute attribute :available p2p-attributes})))))
 
 (defn disable-peer-access!
-  "Disables direct access to memory allocations in a peer context and unregisters any registered allocations.
+  "Disables direct access to memory allocations in a peer context and unregisters
+  any registered allocations.
 
   See [cuCtxDisablePeerAccess](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
   "
@@ -572,7 +576,8 @@
    (disable-peer-access! (current-context))))
 
 (defn enable-peer-access!
-  "Enables direct access to memory allocations in a peer context and unregisters any registered allocations.
+  "Enables direct access to memory allocations in a peer context and unregisters
+  any registered allocations.
 
   See [cuCtxEnablePeerAccess](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
   "
@@ -585,7 +590,8 @@
 ;; ====================== Nvrtc program JIT ========================================
 
 (defn program
-  "TODO"
+  "Creates a CUDA program with an optional name from the `source-code`, and an optional
+  hash map of headers (as strings) and their names."
   ([name source-code headers]
    (wrap (program* name source-code (into-array String (vals headers))
                    (into-array String (keys headers)))))
@@ -595,12 +601,12 @@
    (program nil source-code nil)))
 
 (defn program-log
-  "TODO"
+  "Returns the log string generated by the previous compilation of `prog`."
   [prog]
   (program-log* (extract prog)))
 
 (defn compile!
-  "TODO"
+  "Compiles the given `prog` using a list of string `options`."
   ([prog options]
    (compile* (extract prog) (into-array String options))
    prog)
@@ -608,6 +614,6 @@
    (compile! prog nil)))
 
 (defn ptx
-  "TODO"
+  "Returns the PTX generated by the previous compilation of `prog`."
   ^String [prog]
   (ptx* (extract prog)))

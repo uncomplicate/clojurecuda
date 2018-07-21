@@ -22,7 +22,12 @@
   :codox {:metadata {:doc/format :markdown}
           :src-dir-uri "http://github.com/uncomplicate/clojurecuda/blob/master/"
           :src-linenum-anchor-prefix "L"
-          :output-path "docs/codox"}
+          :output-path "docs/codox"
+          :namespaces [uncomplicate.clojurecuda.core
+                       uncomplicate.clojurecuda.info
+                       uncomplicate.clojurecuda.toolbox
+                       uncomplicate.clojurecuda.internal.protocols
+                       uncomplicate.clojurecuda.internal.constants]}
 
   :profiles {:dev {:plugins [[lein-midje "3.2.1"]
                              [lein-codox "0.10.3"]]
