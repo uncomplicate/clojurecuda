@@ -432,8 +432,8 @@
    (with-check
      (JCudaDriver/cuLaunchKernel fun (.grid-x grid-dim) (.grid-y grid-dim) (.grid-z grid-dim)
                                  (.block-x grid-dim) (.block-y grid-dim) (.block-z grid-dim)
-                                 shared-mem-bytes hstream (Pointer/to params) nil)
-     {:kernel (info fun) :grid-dim grid-dim :hstream hstream}
+                                 shared-mem-bytes (extract hstream) (Pointer/to params) nil)
+     {:kernel (info fun) :grid-dim grid-dim :hstream (info hstream)}
      hstream))
   ([^CUfunction fun ^GridDim grid-dim hstream params]
    (launch! fun grid-dim 0 hstream params))
@@ -459,9 +459,10 @@
                                (throw (ex-info  "Invaling stream flag."
                                                 {:flag flag :available stream-flags})))))))
 
-(def ^{:constant true
-       :doc "The default per-thread stream"}
-  default-stream JCudaDriver/CU_STREAM_PER_THREAD)
+(def default-stream
+  ^{:constant true
+    :doc "The default per-thread stream"}
+  (wrap JCudaDriver/CU_STREAM_PER_THREAD))
 
 (defn ready?
   "Determines status (ready or not) of a compute stream or event `obj`.
