@@ -9,7 +9,7 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.internal.impl
   (:require [uncomplicate.commons
-             [core :refer [Releaseable release info wrap-float wrap-double wrap-long wrap-int]]
+             [core :refer [Releaseable release Info info wrap-float wrap-double wrap-long wrap-int]]
              [utils :as cu :refer [dragan-says-ex]]]
             [uncomplicate.clojurecuda.internal
              [protocols :refer :all]
@@ -40,7 +40,10 @@
   Releaseable
   (release [this]
     (dragan-says-ex "It is not allowed to use and release raw JCuda objects. Use a safe wrapper."
-                    {:this this})))
+                    {:this this}))
+  Info
+  (info [this]
+    (info (wrap this))))
 
 (extend-type CUdevice
   Releaseable
