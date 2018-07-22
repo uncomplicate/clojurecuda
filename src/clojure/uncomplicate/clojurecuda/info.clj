@@ -381,7 +381,7 @@
   (info-attribute* JCudaDriver/cuDeviceGetAttribute device
                    CUdevice_attribute/CU_DEVICE_ATTRIBUTE_WARP_SIZE))
 
-(def ^{:no-doc true :const true}
+(def ^:no-doc
   device-attributes
   {:name device-name
    :total-mem total-mem
