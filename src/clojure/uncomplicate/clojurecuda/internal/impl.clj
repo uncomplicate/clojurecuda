@@ -70,7 +70,7 @@
          (deref ref#))
        Releaseable
        (release [this#]
-         (locking this#
+         (locking ref#
            (when-let [d# (deref ref#)]
              (locking d#
                (with-check (~release-method d#) (vreset! ref# nil)))))
@@ -169,7 +169,7 @@
     @program)
   Releaseable
   (release [this]
-    (locking this
+    (locking program
       (when-let [p @program]
         (locking p
           (with-check-nvrtc (JNvrtc/nvrtcDestroyProgram p) (vreset! program nil)))))
@@ -238,7 +238,7 @@
   Releaseable
   (release [this]
     (if master
-      (locking this
+      (locking cu
         (when-let [c @cu]
           (locking c
             (with-check (JCudaDriver/cuMemFree c)
@@ -295,15 +295,15 @@
 (deftype CUPinnedMemory [cu p hp buf ^long s release-fn]
   Releaseable
   (release [this]
-    (locking this
+    (locking hp
       (when-let [h @hp]
         (locking h
           (release-fn h @buf)
-          (do
-            (vreset! cu nil)
-            (vreset! p nil)
-            (vreset! hp nil)
-            (vreset! buf nil))))))
+          (vreset! cu nil)
+          (vreset! p nil)
+          (vreset! hp nil)
+          (vreset! buf nil))))
+    true)
   Wrapper
   (extract [_]
     @cu)
