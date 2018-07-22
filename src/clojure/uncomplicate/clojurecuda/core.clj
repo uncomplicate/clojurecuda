@@ -460,7 +460,7 @@
                                                 {:flag flag :available stream-flags})))))))
 
 (def default-stream
-  ^{:constant true
+  ^{:const true
     :doc "The default per-thread stream"}
   (wrap JCudaDriver/CU_STREAM_PER_THREAD))
 

@@ -27,7 +27,8 @@
                        uncomplicate.clojurecuda.info
                        uncomplicate.clojurecuda.toolbox
                        uncomplicate.clojurecuda.internal.protocols
-                       uncomplicate.clojurecuda.internal.constants]}
+                       uncomplicate.clojurecuda.internal.constants
+                       uncomplicate.clojurecuda.internal.utils]}
 
   :profiles {:dev {:plugins [[lein-midje "3.2.1"]
                              [lein-codox "0.10.3"]]
@@ -35,7 +36,7 @@
                                  *assert* true
                                  *unchecked-math* :warn-on-boxed
                                  *print-length* 128}
-                   :dependencies [[midje "1.9.1"]]
+                   :dependencies [[midje "1.9.2"]]
                    :jvm-opts ^:replace [#_"--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"]}}
 
   :javac-options ["-target" "1.8" "-source" "1.8" "-Xlint:-options"]
