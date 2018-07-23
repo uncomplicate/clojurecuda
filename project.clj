@@ -6,7 +6,7 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(defproject uncomplicate/clojurecuda "0.5.0-SNAPSHOT"
+(defproject uncomplicate/clojurecuda "0.5.0"
   :description "ClojureCUDA is a Clojure library for parallel computations with Nvidia's CUDA."
   :url "https://github.com/uncomplicate/clojurecuda"
   :scm {:name "git"
@@ -16,8 +16,8 @@
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.jcuda/jcuda "0.9.2"]
                  [org.clojure/core.async "0.4.474"]
-                 [uncomplicate/commons "0.6.0-SNAPSHOT"]
-                 [uncomplicate/fluokitten "0.9.0-SNAPSHOT"]]
+                 [uncomplicate/commons "0.6.0"]
+                 [uncomplicate/fluokitten "0.9.0"]]
 
   :codox {:metadata {:doc/format :markdown}
           :src-dir-uri "http://github.com/uncomplicate/clojurecuda/blob/master/"
