@@ -48,12 +48,24 @@
 (extend-type CUdevice
   Releaseable
   (release [this]
-    true))
+    true)
+  Wrappable
+  (wrap [this]
+    this)
+  Wrapper
+  (extract [this]
+    this))
 
 (extend-type CUfunction
   Releaseable
   (release [this]
-    true))
+    true)
+  Wrappable
+  (wrap [this]
+    this)
+  Wrapper
+  (extract [this]
+    this))
 
 (defmacro ^:private deftype-wrapper [name release-method]
   (let [name-str (str name)]
