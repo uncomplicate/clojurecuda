@@ -89,7 +89,7 @@ The most straightforward way to include ClojureCUDA in your project is with Lein
 ![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
 
 If you use the latest CUDA (as of this writing, `9.2`) that's all. If you must use CUDA `9.0`, or `9.1`, add an explicit
-dependency to `jcuda/jcuda` `0.9.0b`, or `0.9.1` to your project(s).
+dependency to `org.jcuda/jcuda` `0.9.0b`, or `0.9.1` to your project(s).
 
 ClojureCUDA currently works out of the box on Linux, Windows, and OS X. For other plaforms, contact us.
 
