@@ -16,6 +16,7 @@
   (:require [uncomplicate.commons
              [core :refer [with-release info]]
              [utils :refer [mask]]]
+            [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
              [protocols :refer :all]
              [constants :refer :all]

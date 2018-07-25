@@ -40,10 +40,7 @@
   Releaseable
   (release [this]
     (dragan-says-ex "It is not allowed to use and release raw JCuda objects. Use a safe wrapper."
-                    {:this this}))
-  Info
-  (info [this]
-    (info (wrap this))))
+                    {:this this})))
 
 (extend-type CUdevice
   Releaseable
@@ -95,26 +92,41 @@
 (deftype-wrapper CULinkState JCudaDriver/cuLinkDestroy)
 
 (extend-type CUcontext
+  Info
+  (info [this]
+    (info (wrap this)))
   Wrappable
   (wrap [ctx]
     (->CUContext (volatile! ctx))))
 
 (extend-type CUstream
+  Info
+  (info [this]
+    (info (wrap this)))
   Wrappable
   (wrap [stream]
     (->CUStream (volatile! stream))))
 
 (extend-type CUmodule
+  Info
+  (info [this]
+    (info (wrap this)))
   Wrappable
   (wrap [mod]
     (->CUModule (volatile! mod))))
 
 (extend-type CUlinkState
+  Info
+  (info [this]
+    (info (wrap this)))
   Wrappable
   (wrap [link-state]
     (->CULinkState (volatile! link-state))))
 
 (extend-type CUevent
+  Info
+  (info [this]
+    (info (wrap this)))
   Wrappable
   (wrap [event]
     (->CUEvent (volatile! event))))
