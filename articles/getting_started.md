@@ -17,10 +17,11 @@ ClojureCUDA uses native Nvidia GPU drivers, and CUDA toolkit, so it is very impo
 
 ## Usage
 
-First `use` or `require` `uncomplicate.clojurecuda.core` and/or `uncomplicate.clojurecuda.info` in your namespace, and you'll be able to call appropriate functions from the ClojureCUDA library.
+First `use` or `require` `uncomplicate.clojurecuda.core` and/or `uncomplicate.commons.core` and/or `uncomplicate.clojurecuda.info` in your namespace, and you'll be able to call appropriate functions from the ClojureCUDA library.
 
 ```clojure
 (require '[uncomplicate.clojurecuda.core :refer :all]
+         '[uncomplicate.commons.core :refer [info]]
          '[uncomplicate.clojurecuda.info :refer :all])
 ```
 
