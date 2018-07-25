@@ -21,8 +21,7 @@ First `use` or `require` `uncomplicate.clojurecuda.core` and/or `uncomplicate.cl
 
 ```clojure
 (require '[uncomplicate.clojurecuda.core :refer :all]
-         '[uncomplicate.clojurecuda.info :refer :all]
-         '[uncomplicate.clojurecuda.nvrtc :refer :all])
+         '[uncomplicate.clojurecuda.info :refer :all])
 ```
 
 Now you can work with CUDA devices, contexts, streams, memory etc.
