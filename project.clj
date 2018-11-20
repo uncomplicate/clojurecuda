@@ -6,7 +6,7 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(defproject uncomplicate/clojurecuda "0.5.3-SNAPSHOT"
+(defproject uncomplicate/clojurecuda "0.6.0"
   :description "ClojureCUDA is a Clojure library for parallel computations with Nvidia's CUDA."
   :url "https://github.com/uncomplicate/clojurecuda"
   :scm {:name "git"
@@ -14,9 +14,9 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [org.jcuda/jcuda "0.9.2"]
-                 [org.clojure/core.async "0.4.474"]
-                 [uncomplicate/commons "0.6.0"]
+                 [org.jcuda/jcuda "10.0.0"]
+                 [org.clojure/core.async "0.4.490"]
+                 [uncomplicate/commons "0.7.0"]
                  [uncomplicate/fluokitten "0.9.0"]]
 
   :codox {:metadata {:doc/format :markdown}
@@ -36,7 +36,7 @@
                                  *assert* true
                                  *unchecked-math* :warn-on-boxed
                                  *print-length* 128}
-                   :dependencies [[midje "1.9.2"]]
+                   :dependencies [[midje "1.9.4"]]
                    :jvm-opts ^:replace [#_"--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"]}}
 
   :javac-options ["-target" "1.8" "-source" "1.8" "-Xlint:-options"]
