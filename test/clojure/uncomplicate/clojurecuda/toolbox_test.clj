@@ -10,7 +10,7 @@
   (:require [midje.sweet :refer [facts => roughly]]
             [uncomplicate.commons
              [core :refer [release with-release]]
-             [utils :refer [direct-buffer put-float]]]
+             [utils :refer [direct-buffer put-float count-groups]]]
             [uncomplicate.clojurecuda
              [core :refer :all]
              [info :refer :all]
@@ -41,7 +41,7 @@
 
       (memcpy-host! data cu-data)
 
-      (let [acc-size (* Double/BYTES (max 1 (blocks-count wgs cnt)))]
+      (let [acc-size (* Double/BYTES (max 1 (count-groups wgs cnt)))]
         (with-release [sum-reduction-kernel (function modl "sum_reduction")
                        sum-reduce-kernel (function modl "sum_reduce")
                        cu-acc (mem-alloc acc-size)]
@@ -52,7 +52,7 @@
 
       (let [wgs-m 64
             wgs-n 16
-            acc-size (* Double/BYTES (max 1 (* cnt-m (blocks-count wgs-n cnt-n))))
+            acc-size (* Double/BYTES (max 1 (* cnt-m (count-groups wgs-n cnt-n))))
             res (double-array cnt-m)]
         (with-release [sum-reduction-horizontal (function modl "sum_reduction_horizontal")
                        sum-reduce-horizontal (function modl "sum_reduce_horizontal")
@@ -66,7 +66,7 @@
 
       (let [wgs-m 64
             wgs-n 16
-            acc-size (* Double/BYTES (max 1 (* cnt-n (blocks-count wgs-m cnt-m))))
+            acc-size (* Double/BYTES (max 1 (* cnt-n (count-groups wgs-m cnt-m))))
             res (double-array cnt-n)]
         (with-release [sum-reduction-vertical (function modl "sum_reduction_vertical")
                        sum-reduce-vertical (function modl "sum_reduce_vertical")

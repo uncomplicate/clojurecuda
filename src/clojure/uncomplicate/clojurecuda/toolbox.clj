@@ -11,7 +11,8 @@
   "Various helpers that are not needed by ClojureCUDA itself,
   but may be very helpful in applications. See Neanderthal and Bayadera libraries
   for the examples of how to use them."
-  (:require [uncomplicate.clojurecuda.core :refer :all]))
+  (:require [uncomplicate.commons.utils :refer [count-groups]]
+   [uncomplicate.clojurecuda.core :refer :all]))
 
 (let [pointer-arr-class (class (make-parameters 0))]
 
@@ -24,11 +25,11 @@
                               reduction-params
                               (apply parameters Integer/MAX_VALUE reduction-params))]
        (launch! main-kernel (grid-1d n local-n) hstream main-params)
-       (loop [global-size (blocks-count local-n n)]
+       (loop [global-size (count-groups local-n n)]
          (when (< 1 global-size)
            (launch! reduction-kernel (grid-1d global-size local-n) hstream
                     (set-parameter! reduction-params 0 global-size))
-           (recur (blocks-count local-n global-size))))
+           (recur (count-groups local-n global-size))))
        hstream))
     ([hstream main-kernel reduction-kernel main-params reduction-params m n local-m local-n]
      (let [main-params (if (instance? pointer-arr-class main-params)
@@ -39,12 +40,12 @@
                               (apply parameters Integer/MAX_VALUE Integer/MAX_VALUE reduction-params))]
        (if (or (< 1 (long local-n)) (<= (long local-n) (long n)))
          (loop [hstream (launch! main-kernel (grid-2d m n local-m local-n) hstream main-params)
-                global-size (blocks-count local-n n)]
+                global-size (count-groups local-n n)]
            (if (= 1 global-size)
              hstream
              (recur (launch! reduction-kernel (grid-2d m global-size local-m local-n) hstream
                              (set-parameters! reduction-params 0 m global-size))
-                    (blocks-count local-n global-size))))
+                    (count-groups local-n global-size))))
          (throw (IllegalArgumentException.
                  (format "local-n %d would cause infinite recursion for n:%d." local-n n))))))))
 

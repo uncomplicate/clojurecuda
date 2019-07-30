@@ -15,7 +15,7 @@
   "
   (:require [uncomplicate.commons
              [core :refer [with-release info]]
-             [utils :refer [mask]]]
+             [utils :refer [mask count-groups]]]
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
              [protocols :refer :all]
@@ -324,15 +324,6 @@
 
 (defrecord GridDim [^long grid-x ^long grid-y ^long grid-z ^long block-x ^long block-y ^long block-z])
 
-(defn blocks-count
-  "Computes the number of blocks that are needed for the global size kernel execution. "
-  (^long [^long block-size ^long global-size]
-   (if (< block-size global-size)
-     (quot (+ global-size (dec block-size)) block-size)
-     1))
-  (^long [^long global-size]
-   (blocks-count 1024 global-size)))
-
 (defn grid-1d
   "Creates a 1-dimensional [[GridDim]] record with grid and block dimensions x.
   Note: dim-x is the total number of threads globally, not the number of blocks."
@@ -341,7 +332,7 @@
      (grid-1d dim-x block-x)))
   ([^long dim-x ^long block-x]
    (let [block-x (min dim-x block-x)]
-     (GridDim. (blocks-count block-x dim-x) 1 1 block-x 1 1))))
+     (GridDim. (count-groups block-x dim-x) 1 1 block-x 1 1))))
 
 (defn grid-2d
   "Creates a 2-dimensional [[GridDim]] record with grid and block dimensions x and y.
@@ -353,7 +344,7 @@
   ([^long dim-x ^long dim-y ^long block-x ^long block-y]
    (let [block-x (min dim-x block-x)
          block-y (min dim-y block-y)]
-     (GridDim. (blocks-count block-x dim-x) (blocks-count block-y dim-y) 1 block-x block-y 1))))
+     (GridDim. (count-groups block-x dim-x) (count-groups block-y dim-y) 1 block-x block-y 1))))
 
 (defn grid-3d
   "Creates a 3-dimensional [[GridDim]] record with grid and block dimensions x, y, and z.
@@ -367,8 +358,8 @@
    (let [block-x (min (long dim-x) (long block-x))
          block-y (min (long dim-y) (long block-y))
          block-z (min (long dim-z) (long block-z))]
-     (GridDim. (blocks-count block-x dim-x) (blocks-count block-y dim-y)
-               (blocks-count block-z dim-z) block-x block-y block-z))))
+     (GridDim. (count-groups block-x dim-x) (count-groups block-y dim-y)
+               (count-groups block-z dim-z) block-x block-y block-z))))
 
 (defn global
   "Returns CUDA global linear memory named `name` from module `m`, with optionally specified size.
