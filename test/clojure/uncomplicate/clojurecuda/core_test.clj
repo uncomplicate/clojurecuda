@@ -12,7 +12,7 @@
             [uncomplicate.commons.core :refer [release with-release]]
             [uncomplicate.clojurecuda
              [core :refer :all]
-             [info :refer [pci-bus-id-string]]]
+             [info :as info :refer [pci-bus-id-string]]]
             [uncomplicate.clojurecuda.internal.protocols :refer [size host-buffer]])
   (:import clojure.lang.ExceptionInfo
            [java.nio ByteBuffer ByteOrder]))
@@ -137,94 +137,124 @@
 
 ;; =============== Memory Management Tests ==============================================
 
-(with-context (context (device 0) :map-host)
+(with-release [dev (device 0)]
+  (with-context (context dev :map-host)
 
-  (facts
-   "mem-alloc tests."
-   (mem-alloc 0) => (throws ExceptionInfo)
-   (with-release [buf (mem-alloc Float/BYTES)]
-     (size buf) => Float/BYTES))
+    (facts
+     "mem-alloc tests."
+     (mem-alloc 0) => (throws ExceptionInfo)
+     (with-release [buf (mem-alloc Float/BYTES)]
+       (size buf) => Float/BYTES))
 
-  (facts
-   "Linear memory tests."
-   (with-release [cuda1 (mem-alloc Float/BYTES)
-                  cuda2 (mem-alloc Float/BYTES)
-                  host1 (float-array [173.0])
-                  host2 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))]
-     (memcpy-host! host1 cuda1) => cuda1
-     (memcpy! cuda1 cuda2) => cuda2
-     (memcpy-host! cuda2 host2) => host2
-     (.getFloat ^ByteBuffer host2 0) => 173.0))
+    (facts
+     "Linear memory tests."
+     (with-release [cuda1 (mem-alloc Float/BYTES)
+                    cuda2 (mem-alloc Float/BYTES)
+                    host1 (float-array [173.0])
+                    host2 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))]
+       (memcpy-host! host1 cuda1) => cuda1
+       (memcpy! cuda1 cuda2) => cuda2
+       (memcpy-host! cuda2 host2) => host2
+       (.getFloat ^ByteBuffer host2 0) => 173.0))
 
-  (facts
-   "Linear memory sub-region tests."
-   (with-release [cuda (mem-alloc 20)]
-     (memcpy-host! (float-array [1 2 3 4 5]) cuda) => cuda
-     (let [cuda1 (mem-sub-region cuda 0 8)
-           cuda2 (mem-sub-region cuda 8 1000)]
-       (seq (memcpy-host! cuda1 (float-array 2))) => (seq (float-array [1 2]))
-       (seq (memcpy-host! cuda2 (float-array 3))) => (seq (float-array [3 4 5]))
-       (do (release cuda1)
-           (release cuda2)
-           (seq (memcpy-host! cuda (float-array 5))) => (seq (float-array [1 2 3 4 5]))))))
+    (facts
+     "Linear memory sub-region tests."
+     (with-release [cuda (mem-alloc 20)]
+       (memcpy-host! (float-array [1 2 3 4 5]) cuda) => cuda
+       (let [cuda1 (mem-sub-region cuda 0 8)
+             cuda2 (mem-sub-region cuda 8 1000)]
+         (seq (memcpy-host! cuda1 (float-array 2))) => (seq (float-array [1 2]))
+         (seq (memcpy-host! cuda2 (float-array 3))) => (seq (float-array [3 4 5]))
+         (do (release cuda1)
+             (release cuda2)
+             (seq (memcpy-host! cuda (float-array 5))) => (seq (float-array [1 2 3 4 5]))))))
 
-  (facts
-   "mem-host-alloc tests."
-   (with-release [mapped-host (mem-host-alloc Float/BYTES :devicemap)
-                  host (float-array 1)]
-     (mem-host-alloc Float/BYTES :unknown) => (throws ExceptionInfo)
-     (size mapped-host) => Float/BYTES
-     (.putFloat ^ByteBuffer (host-buffer mapped-host) 0 13) => (host-buffer mapped-host)
-     (memcpy-host! mapped-host host) => host
-     (aget ^floats host 0) => 13.0))
+    (facts
+     "mem-host-alloc tests."
+     (with-release [mapped-host (mem-host-alloc Float/BYTES :devicemap)
+                    host (float-array 1)]
+       (mem-host-alloc Float/BYTES :unknown) => (throws ExceptionInfo)
+       (size mapped-host) => Float/BYTES
+       (.putFloat ^ByteBuffer (host-buffer mapped-host) 0 13) => (host-buffer mapped-host)
+       (memcpy-host! mapped-host host) => host
+       (aget ^floats host 0) => 13.0))
 
-  (facts
-   "mem-alloc-host tests."
-   (with-release [mapped-host (mem-alloc-host Float/BYTES)
-                  host (float-array 1)]
-     (size mapped-host) => Float/BYTES
-     (.putFloat ^ByteBuffer (host-buffer mapped-host) 0 14) => (host-buffer mapped-host)
-     (memcpy-host! mapped-host host) => host
-     (aget ^floats host 0) => 14.0))
+    (facts
+     "mem-alloc-host tests."
+     (with-release [mapped-host (mem-alloc-host Float/BYTES)
+                    host (float-array 1)]
+       (size mapped-host) => Float/BYTES
+       (.putFloat ^ByteBuffer (host-buffer mapped-host) 0 14) => (host-buffer mapped-host)
+       (memcpy-host! mapped-host host) => host
+       (aget ^floats host 0) => 14.0))
 
-  (facts
-   "memset tests."
-   (with-release [mapped-host (mem-alloc-host (* 2 Integer/BYTES))
-                  host (int-array 2)]
-     (.putInt ^ByteBuffer (host-buffer mapped-host) 0 24) => (host-buffer mapped-host)
-     (.putInt ^ByteBuffer (host-buffer mapped-host) Integer/BYTES 34) => (host-buffer mapped-host)
-     (memcpy-host! mapped-host host) => host
-     (seq host) => (list 24 34)
-     (memcpy-host! (memset! mapped-host 0 1) host)
-     (seq host) => (list 0 34)
-     (memcpy-host! (memset! mapped-host 0) host)
-     (seq host) => (list 0 0)) )
+    (facts
+     "memset tests."
+     (with-release [mapped-host (mem-alloc-host (* 2 Integer/BYTES))
+                    host (int-array 2)]
+       (.putInt ^ByteBuffer (host-buffer mapped-host) 0 24) => (host-buffer mapped-host)
+       (.putInt ^ByteBuffer (host-buffer mapped-host) Integer/BYTES 34) => (host-buffer mapped-host)
+       (memcpy-host! mapped-host host) => host
+       (seq host) => (list 24 34)
+       (memcpy-host! (memset! mapped-host 0 1) host)
+       (seq host) => (list 0 34)
+       (memcpy-host! (memset! mapped-host 0) host)
+       (seq host) => (list 0 0)) )
 
-  (facts
-   "mem-alloc-managed tests."
-   (with-release [host0 (float-array [15])
-                  host1 (float-array 1)
-                  cuda0 (mem-alloc-managed Float/BYTES :host)
-                  cuda1 (mem-alloc-managed Float/BYTES :global)]
+    (when (and (info/managed-memory dev) (info/concurrent-managed-access dev))
+      (facts
+       "mem-alloc-managed tests."
+       (with-release [host0 (float-array [15])
+                      host1 (float-array 1)
+                      cuda0 (mem-alloc-managed Float/BYTES :host)
+                      cuda1 (mem-alloc-managed Float/BYTES :global)]
 
-     (size cuda0) => Float/BYTES
-     (mem-alloc-managed Float/BYTES :unknown) => (throws ExceptionInfo)
-     (memcpy-host! host0 cuda0) => cuda0
-     (memcpy! cuda0 cuda1) => cuda1
-     (memcpy-host! cuda1 host1) => host1
-     (aget ^floats host1 0) => 15.0))
+         (size cuda0) => Float/BYTES
+         (mem-alloc-managed Float/BYTES :unknown) => (throws ExceptionInfo)
+         (memcpy-host! host0 cuda0) => cuda0
+         (memcpy! cuda0 cuda1) => cuda1
+         (memcpy-host! cuda1 host1) => host1
+         (aget ^floats host1 0) => 15.0)))
 
-  (facts
-   "mem-alloc-registered tests."
-   (with-release [host0 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))
-                  host1 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))
-                  cuda0 (mem-host-register host0)
-                  cuda1 (mem-host-register host1)]
+    (when (info/managed-memory dev)
+      (facts
+        "mem-alloc-managed with globally shared attached memory tests."
+        (with-release [host0 (float-array [16])
+                       host1 (float-array 1)
+                       cuda0 (mem-alloc-managed Float/BYTES :host)
+                       cuda1 (mem-alloc-managed Float/BYTES :global)]
+          (attach-mem! nil cuda0 Float/BYTES :global) => nil
+          (size cuda0) => Float/BYTES
+          (memcpy-host! host0 cuda0) => cuda0
+          (memcpy! cuda0 cuda1) => cuda1
+          (memcpy-host! cuda1 host1) => host1
+          (aget ^floats host1 0) => 16.0))
+      (facts
+        "mem-alloc-managed with attached memory tests."
+        (with-release [host0 (float-array [17])
+                       host1 (float-array 1)
+                       cuda0 (mem-alloc-managed Float/BYTES :host)
+                       cuda1 (mem-alloc-managed Float/BYTES :global)]
+          (let [hstream (attach-mem! cuda0 Float/BYTES :single)]
+            (size cuda0) => Float/BYTES
+            (memcpy-host! host0 cuda0) => (throws ExceptionInfo)
+            (memcpy-host! host0 cuda0 hstream) => cuda0
+            (memcpy! cuda0 cuda1 hstream) => cuda1
+            (memcpy-host! cuda1 host1 hstream) => host1
+            (synchronize! hstream)
+            (aget ^floats host1 0) => 17.0))))
 
-     (size cuda0) => Float/BYTES
-     (.putFloat host0 0 44.0)
-     (memcpy! cuda0 cuda1) => cuda1
-     (.getFloat host1 0) => 44.0)))
+    (facts
+     "mem-alloc-registered tests."
+     (with-release [host0 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))
+                    host1 (.order (ByteBuffer/allocateDirect Float/BYTES) (ByteOrder/nativeOrder))
+                    cuda0 (mem-host-register host0)
+                    cuda1 (mem-host-register host1)]
+
+       (size cuda0) => Float/BYTES
+       (.putFloat host0 0 44.0)
+       (memcpy! cuda0 cuda1) => cuda1
+       (.getFloat host1 0) => 44.0))))
 
 ;; ================= Peer Access Management Tests =====================================
 

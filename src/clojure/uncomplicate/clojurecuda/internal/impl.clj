@@ -639,6 +639,13 @@
   [^CUstream hstream ^CUevent ev]
   (with-check (JCudaDriver/cuStreamWaitEvent hstream ev 0) hstream))
 
+(defn attach-mem*
+  "Attach memory of size `size`, specified by an integer `flag` to a `hstream` asynchronously.
+
+  See [cuStreamAttachMemAsync](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)."
+  ([^CUstream hstream mem size flag]
+   (with-check (JCudaDriver/cuStreamAttachMemAsync hstream mem size flag) hstream)))
+
 ;; ================== Event Management =======================================
 
 (defn event*

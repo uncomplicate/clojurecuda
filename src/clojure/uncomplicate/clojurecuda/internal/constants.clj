@@ -80,7 +80,8 @@
        :doc "Available flags for the [[core/mem-host-attach]] function."}
   mem-attach-flags
   {:global CUmemAttach_flags/CU_MEM_ATTACH_GLOBAL
-   :host CUmemAttach_flags/CU_MEM_ATTACH_HOST})
+   :host CUmemAttach_flags/CU_MEM_ATTACH_HOST
+   :single CUmemAttach_flags/CU_MEM_ATTACH_SINGLE})
 
 (def ^{:const true
        :doc "Available flags for the [[core/mem-host-attach]] function."}
