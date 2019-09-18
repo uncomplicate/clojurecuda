@@ -237,7 +237,9 @@
                        cuda1 (mem-alloc-managed Float/BYTES :global)]
           (let [hstream (attach-mem! cuda0 Float/BYTES :single)]
             (size cuda0) => Float/BYTES
-            (memcpy-host! host0 cuda0) => (throws ExceptionInfo)
+            (if (info/concurrent-managed-access dev)
+              (memcpy-host! host0 cuda0) => cuda0
+              (memcpy-host! host0 cuda0) => (throws ExceptionInfo))
             (memcpy-host! host0 cuda0 hstream) => cuda0
             (memcpy! cuda0 cuda1 hstream) => cuda1
             (memcpy-host! cuda1 host1 hstream) => host1
