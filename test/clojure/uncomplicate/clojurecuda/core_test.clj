@@ -261,17 +261,43 @@
 ;; ================= Peer Access Management Tests =====================================
 
 (facts
- "Peer access tests"
- (let [num-dev (device-count)
-       dev (device)
-       ctx (context dev)]
-   (with-context ctx
-     (if (< 1 num-dev)
-       (let [dev1 (device 1)]
-         (p2p-attribute dev dev1 :access-supported) => false
-         (can-access-peer dev dev1) => false
-         (enable-peer-access!)
-         => (if (p2p-attribute dev dev1 :access-supported) ctx (throws ExceptionInfo)))
-       (do
-         (p2p-attribute dev dev :access-supported) => (throws ExceptionInfo)
-         (can-access-peer dev dev) => false)))))
+  "Peer access tests"
+  (let [num-dev (device-count)
+        devices (mapv device (range num-dev))
+        combinations (set (for [x (range num-dev) y (range num-dev) :when (not= x y)] #{x y}))
+        p2p? (fn [num-pair] (let [[a b] (vec num-pair)
+                                  dev-a (nth devices a)
+                                  dev-b (nth devices b)]
+                              (when (and (p2p-attribute dev-a dev-b :access-supported)
+                                         (can-access-peer dev-a dev-b)
+                                         (can-access-peer dev-b dev-a))
+                                [dev-a dev-b])))]
+    (if-let [[dev-a dev-b] (some p2p? combinations)]
+      (let [program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cu")
+            ^:const vctr-len 3]
+        (with-release [host-a (float-array [1 2 3])
+                       host-b (float-array [2 3 4])
+                       host-sum (float-array vctr-len)
+                       ctx (context dev-a)
+                       peer-ctx (context dev-b)]
+          (in-context ctx
+            (with-release [prog (compile! (program program-source))
+                           m (module prog)
+                           vector-add (function m "add")
+                           gpu-a (mem-alloc (* Float/BYTES vctr-len))
+                           gpu-a-sum (mem-alloc (* Float/BYTES vctr-len))
+                           gpu-b (in-context peer-ctx (mem-alloc (* Float/BYTES vctr-len)))]
+              (disable-peer-access! peer-ctx) => (throws ExceptionInfo)
+              (in-context peer-ctx (disable-peer-access! ctx) => (throws ExceptionInfo))
+              (memcpy-host! host-a gpu-a) => gpu-a
+              (in-context peer-ctx (memcpy-host! host-b gpu-b) => gpu-b)
+              (enable-peer-access! peer-ctx) => peer-ctx
+              (in-context peer-ctx (enable-peer-access! ctx) => ctx)
+              (launch! vector-add (grid-1d vctr-len) (parameters vctr-len gpu-a gpu-b gpu-a-sum))
+              (synchronize!)
+              (seq (memcpy-host! gpu-a-sum host-sum)) => (seq [3.0 5.0 7.0])
+              (disable-peer-access! peer-ctx) => peer-ctx
+              (in-context peer-ctx (disable-peer-access! ctx) => ctx)))))
+      (when-let [dev (first devices)]
+        (p2p-attribute dev dev :access-supported) => (throws ExceptionInfo)
+        (can-access-peer dev dev) => false))))
