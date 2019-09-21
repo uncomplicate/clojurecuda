@@ -117,6 +117,10 @@
   (pos? (info-attribute* JCudaDriver/cuDeviceGetAttribute device
                          CUdevice_attribute/CU_DEVICE_ATTRIBUTE_MANAGED_MEMORY)))
 
+(defn concurrent-managed-access [^CUdevice device]
+  (pos? (info-attribute* JCudaDriver/cuDeviceGetAttribute device
+                         CUdevice_attribute/CU_DEVICE_ATTRIBUTE_CONCURRENT_MANAGED_ACCESS)))
+
 (defn max-block-dim-x ^long [^CUdevice device]
   (info-attribute* JCudaDriver/cuDeviceGetAttribute device
                    CUdevice_attribute/CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X))

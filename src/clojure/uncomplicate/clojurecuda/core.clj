@@ -499,6 +499,33 @@
   (wait-event* (extract hstream) (extract ev))
   hstream)
 
+(defn attach-mem!
+  "Attach memory `mem` of size `size`, specified by `flag` to a `hstream` asynchronously.
+
+  Valid flags are: `:global`, `:host` and `:single` (the default).
+
+  If :global flag is specified, the memory can be accessed by any stream on any device.
+  If :host flag is specified, the program makes a guarantee that it won't access the memory on the device from any stream on a device that has no `concurrent-managed-access` capability.
+  If :single flag is specified and `hStream` is associated with a device that has no `concurrent-managed-access` capability, the program makes a guarantee that it will only access the memory on the device from `hStream`. It is illegal to attach singly to the nil stream, because the nil stream is a virtual global stream and not a specific stream. An error will be returned in this case.
+
+  When memory is associated with a single stream, the Unified Memory system will allow CPU access to this memory
+  region so long as all operations in hStream have completed, regardless of whether other streams are active.
+  In effect, this constrains exclusive ownership of the managed memory region by an active GPU to per-stream
+  activity instead of whole-GPU activity.
+
+  See [cuStreamAttachMemAsync](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)."
+  ([^CUstream hstream mem size flag]
+   (let [hstream' (cond hstream (extract hstream)
+                        (and (= :global flag) (nil? hstream)) nil
+                        :else (throw (ex-info "nil stream is a virtual global stream and not a specific stream that may be only used with :global mem-attach flag."
+                                              {:flag flag :available mem-attach-flags})))]
+     (attach-mem* hstream' (extract mem) size (or (mem-attach-flags flag)
+                                                  (throw (ex-info "Unknown mem-attach flag."
+                                                                  {:flag flag :available mem-attach-flags})))))
+   hstream)
+  ([mem size flag]
+   (attach-mem! default-stream mem size flag)))
+
 ;; ================== Event Management =======================================
 
 (defn event
