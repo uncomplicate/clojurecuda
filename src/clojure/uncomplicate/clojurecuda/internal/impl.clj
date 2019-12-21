@@ -34,7 +34,9 @@
 ;; ==================== Release resources =======================
 
 (defn native-pointer ^long [npo]
-  (JCudaAccessor/getNativePointer npo))
+  (if npo
+    (JCudaAccessor/getNativePointer npo)
+    0))
 
 (extend-type NativePointerObject
   Releaseable
