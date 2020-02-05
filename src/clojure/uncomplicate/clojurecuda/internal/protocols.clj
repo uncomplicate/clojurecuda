@@ -11,12 +11,6 @@
 
 ;; =================== Object wrappers =================================
 
-(defprotocol Wrapper
-  (extract [this]))
-
-(defprotocol Wrappable
-  (wrap [this]))
-
 (defprotocol Mem
   "An object that represents memory that participates in CUDA operations.
   It can be on the device, or on the host.  Built-in implementations:

@@ -9,7 +9,8 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.internal.impl
   (:require [uncomplicate.commons
-             [core :refer [Releaseable release Info info wrap-float wrap-double wrap-long wrap-int]]
+             [core :refer [Releaseable release Info info Wrapper Wrappable wrap extract
+                           wrap-float wrap-double wrap-long wrap-int]]
              [utils :as cu :refer [dragan-says-ex]]]
             [uncomplicate.clojurecuda.internal
              [protocols :refer :all]
@@ -23,20 +24,10 @@
            [java.nio ByteBuffer ByteOrder]
            java.nio.file.Path java.util.Arrays java.io.File))
 
-(extend-type nil
-  Wrapper
-  (extract [_]
-    nil)
-  Wrappable
-  (wrap [this]
-    nil))
-
 ;; ==================== Release resources =======================
 
 (defn native-pointer ^long [npo]
-  (if npo
-    (JCudaAccessor/getNativePointer npo)
-    0))
+  (if npo (JCudaAccessor/getNativePointer npo) 0))
 
 (extend-type NativePointerObject
   Releaseable

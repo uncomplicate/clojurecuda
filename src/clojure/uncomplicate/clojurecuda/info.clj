@@ -11,10 +11,9 @@
   "Info functions for all CUDA objects (devices, etc...).
   "
   (:require [clojure.string :as str]
+            [uncomplicate.commons.core :refer [Info info wrap extract]]
             [uncomplicate.fluokitten.core :refer [fmap op]]
-            [uncomplicate.commons.core :refer [Info info]]
             [uncomplicate.clojurecuda.internal
-             [protocols :refer [wrap extract]]
              [constants :refer :all]
              [utils :refer [with-check maybe]]
              [impl :refer [current-context*]]])

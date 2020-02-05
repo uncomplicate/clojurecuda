@@ -14,7 +14,7 @@
   Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
-             [core :refer [with-release info]]
+             [core :refer [with-release info wrap extract]]
              [utils :refer [mask count-groups]]]
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
@@ -394,7 +394,7 @@
 (defn parameters
   "Creates an array of `Pointer`s to CUDA `params`. `params` can be any object on
   device ([[CULinearMemory]] for example), or host (arrays, numbers) that makes sense as a kernel
-  parameter per CUDA specification. Use the result as an parameterument in [[launch!]].
+  parameter per CUDA specification. Use the result as an parameter argument in [[launch!]].
   "
   ([parameter & parameters]
    (let [len (if parameters (inc (count parameters)) 1)
