@@ -10,7 +10,7 @@
     uncomplicate.clojurecuda.internal.impl
   (:require [uncomplicate.commons
              [core :refer [Releaseable release Info info Wrapper Wrappable wrap extract
-                           wrap-float wrap-double wrap-long wrap-int]]
+                           wrap-float wrap-double wrap-long wrap-int wrap-short wrap-byte]]
              [utils :as cu :refer [dragan-says-ex]]]
             [uncomplicate.clojurecuda.internal
              [protocols :refer :all]
@@ -415,6 +415,20 @@
   (size [this]
     Long/BYTES))
 
+(extend-type Short
+  Mem
+  (ptr [this]
+    (ptr (wrap-short this)))
+  (size [this]
+    Short/BYTES))
+
+(extend-type Byte
+  Mem
+  (ptr [this]
+    (ptr (wrap-byte this)))
+  (size [this]
+    Byte/BYTES))
+
 (defmacro ^:private extend-mem-array [type atype bytes]
   `(extend-type ~type
     HostMem
@@ -435,7 +449,7 @@
 (extend-mem-array (Class/forName "[D") doubles Double/BYTES)
 (extend-mem-array (Class/forName "[I") ints Integer/BYTES)
 (extend-mem-array (Class/forName "[J") longs Long/BYTES)
-(extend-mem-array (Class/forName "[B") bytes 1)
+(extend-mem-array (Class/forName "[B") bytes Byte/BYTES)
 (extend-mem-array (Class/forName "[S") shorts Short/BYTES)
 (extend-mem-array (Class/forName "[C") chars Character/BYTES)
 
