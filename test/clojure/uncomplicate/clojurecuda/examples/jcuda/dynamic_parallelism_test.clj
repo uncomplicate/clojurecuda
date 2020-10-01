@@ -22,9 +22,8 @@
       num-elements (* num-parent-threads num-child-threads)]
   (with-context (context (device))
     (with-release [prog (compile! (program program-source)
-                                  ["-arch=compute_35" "--relocatable-device-code=true"
-                                   "-default-device"])
-                   linked-prog (link [[:library (io/file "/usr/local/cuda/lib64/libcudadevrt.a")]
+                                  ["--relocatable-device-code=true" "-default-device"])
+                   linked-prog (link [[:library (io/file "/opt/cuda/lib64/libcudadevrt.a")]
                                       [:ptx prog]])
                    m (module (link-complete linked-prog))
                    parent (function m "parentKernel")

@@ -28,7 +28,7 @@
   (with-context (context dev)
     (with-release [wgs (max-block-dim-x dev)
                    prog (compile! (program program-source)
-                                  ["-DREAL=float" "-DACCUMULATOR=double" "-arch=compute_30"
+                                  ["-DREAL=float" "-DACCUMULATOR=double"
                                    (format "-DWGS=%d" wgs)])
                    modl (module prog)
                    data (let [d (direct-buffer (* cnt Float/BYTES))]
