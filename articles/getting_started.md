@@ -12,7 +12,7 @@ ClojureCUDA uses native Nvidia GPU drivers, and CUDA toolkit, so it is very impo
 
 ## Minimum requirements
 * Java 8
-* CUDA Toolkit 10.2
+* CUDA Toolkit 11.0
 
 ## Usage
 
@@ -79,7 +79,7 @@ If you need higher-level high performance functionality, such as matrix computat
 
 ### Install CUDA Toolkit
 
-To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU drivers. If you need to create your own CUDA kernels (you most probably do), you also need CUDA Toolkit. You can download both the drivers and the toolkit as one bundle from [Nvidia's CUDA Toolkit page](https://developer.nvidia.com/cuda-toolkit). *Please note that ClojureCUDA requires a minimal CUDA version, which is currently `10.2`, and prefers the latest CUDA (currently `10.2`) so make sure that you have recently updated your drivers and the toolkit.* If you use older drivers, some things might work, but some might not.
+To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU drivers. If you need to create your own CUDA kernels (you most probably do), you also need CUDA Toolkit. You can download both the drivers and the toolkit as one bundle from [Nvidia's CUDA Toolkit page](https://developer.nvidia.com/cuda-toolkit). *Please note that ClojureCUDA requires a minimal CUDA version, which is currently `11.0`, and prefers the latest CUDA (currently `11.0`) so make sure that you have recently updated your drivers and the toolkit.* If you use older drivers, some things might work, but some might not.
 
 ### Add ClojureCUDA jar
 
@@ -87,8 +87,8 @@ The most straightforward way to include ClojureCUDA in your project is with Lein
 
 ![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
 
-If you use the latest CUDA (as of this writing, `10.2`) that's all. If you must use CUDA `10.0`, or `9.2`, add an explicit
-dependency to `org.jcuda/jcuda` `10.0`, or `0.9.2` to your project(s).
+If you use the latest CUDA (as of this writing, `11.0`) that's all. If you must use CUDA `10.2`, or `9.2`, add an explicit
+dependency to `org.jcuda/jcuda` `10.0`, or `0.9.2` to your project(s), or use an earlier version of ClojureCL.
 
 ClojureCUDA currently works out of the box on Linux, Windows, and OS X. For other plaforms, contact us.
 
