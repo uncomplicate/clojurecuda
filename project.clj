@@ -6,7 +6,7 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(defproject uncomplicate/clojurecuda "0.13.0"
+(defproject uncomplicate/clojurecuda "0.14.0-SNAPSHOT"
   :description "ClojureCUDA is a Clojure library for parallel computations with Nvidia's CUDA."
   :url "https://github.com/uncomplicate/clojurecuda"
   :scm {:name "git"
@@ -14,7 +14,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.jcuda/jcuda "11.2.0"]
+                 [org.jcuda/jcuda "11.4.1"]
                  [org.clojure/core.async "1.3.610"]
                  [uncomplicate/commons "0.12.0"]
                  [uncomplicate/fluokitten "0.9.1"]]
