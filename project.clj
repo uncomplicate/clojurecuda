@@ -36,7 +36,7 @@
                                  *assert* true
                                  *unchecked-math* :warn-on-boxed
                                  *print-length* 128}
-                   :dependencies [[midje "1.9.9"]]
+                   :dependencies [[midje "1.10.4"]]
                    :jvm-opts ^:replace [#_"--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"]}}
 
   :javac-options ["-target" "1.8" "-source" "1.8" "-Xlint:-options"]
