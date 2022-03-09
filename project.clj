@@ -14,7 +14,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.jcuda/jcuda "11.4.1"]
+                 [org.jcuda/jcuda "11.5.2"]
                  [org.clojure/core.async "1.3.618"]
                  [uncomplicate/commons "0.12.3"]
                  [uncomplicate/fluokitten "0.9.1"]]
@@ -36,7 +36,7 @@
                                  *assert* true
                                  *unchecked-math* :warn-on-boxed
                                  *print-length* 128}
-                   :dependencies [[midje "1.10.4"]]
+                   :dependencies [[midje "1.10.5"]]
                    :jvm-opts ^:replace ["--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED"
                                         "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"]}}
 
