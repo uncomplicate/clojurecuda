@@ -12,7 +12,7 @@ ClojureCUDA uses native Nvidia GPU drivers, and CUDA toolkit, so it is very impo
 
 ## Minimum requirements
 * Java 8
-* CUDA Toolkit 11.0+ (the CUDA version on your system has to match the one specified project.clj. Prefer 11.6)
+* CUDA Toolkit 11.0+ (the CUDA version on your system has to match the one specified project.clj. Prefer 11.8)
 * Linux or Windows. macOS doesn't allow CUDA from version 11 and up. You can only use an old release of ClojureCUDA on macOS.
 
 ## Usage
