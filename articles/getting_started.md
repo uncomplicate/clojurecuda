@@ -80,7 +80,7 @@ If you need higher-level high performance functionality, such as matrix computat
 
 ### Install CUDA Toolkit
 
-To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU drivers. If you need to create your own CUDA kernels (you most probably do), you also need CUDA Toolkit. You can download both the drivers and the toolkit as one bundle from [Nvidia's CUDA Toolkit page](https://developer.nvidia.com/cuda-toolkit). *Please note that ClojureCUDA requires a minimal CUDA version, which is currently `11.0`, and prefers the latest CUDA (currently `11.4`) so make sure that you have recently updated your drivers and the toolkit.* If you use older drivers, some things might work, but some might not.
+To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU drivers. If you need to create your own CUDA kernels (you most probably do), you also need CUDA Toolkit. You can download both the drivers and the toolkit as one bundle from [Nvidia's CUDA Toolkit page](https://developer.nvidia.com/cuda-toolkit). *Please note that ClojureCUDA requires a minimal CUDA version, which is currently `11.0`, and prefers the latest CUDA (currently `11.8`) so make sure that you have recently updated your drivers and the toolkit.* If you use older drivers, some things might work, but some might not.
 
 ### Add ClojureCUDA jar
 
@@ -88,10 +88,10 @@ The most straightforward way to include ClojureCUDA in your project is with Lein
 
 ![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
 
-If you use the latest CUDA (as of this writing, `11.6`) that's all. If you must use CUDA `10.2`, or `9.2`, add an explicit
+If you use the latest CUDA (as of this writing, `11.8`) that's all. If you must use CUDA `10.2`, or `9.2`, add an explicit
 dependency to `org.jcuda/jcuda` `10.0`, or `0.9.2` to your project(s), or use an earlier version of ClojureCUDA. ClojuerCUDA might work with an earlier (matching) version of CUDA/JCuda, but it is not guaranteed.
 
-ClojureCUDA currently works out of the box on Linux, Windows, and OS X. For other plaforms, contact us.
+ClojureCUDA currently works out of the box on Linux, Windows, and OS X. For other platforms, contact us.
 
 ## Where to go next
 
