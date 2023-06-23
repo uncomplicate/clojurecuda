@@ -27,7 +27,7 @@
 (with-release [ctx (context (device))]
   (facts
    "Context info tests."
-   (count (info ctx)) => 10
+   (count (info ctx)) => 13
    (limit! :stack-size 512) => 512
    (limit :stack-size) => 512))
 

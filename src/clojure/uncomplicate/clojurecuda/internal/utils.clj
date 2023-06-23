@@ -11,9 +11,9 @@
   "Utility functions used as helpers in other ClojureCUDA namespaces.
   The user of the ClojureCUDA library would probably not need to use
   any of the functions defined here."
-  (:require [uncomplicate.commons.utils :as cu])
-  (:import clojure.lang.ExceptionInfo
-           jcuda.driver.CUresult))
+  (:require [uncomplicate.commons.utils :as utils]
+            [uncomplicate.clojurecuda.internal.constants :refer [cu-result-codes]])
+  (:import clojure.lang.ExceptionInfo))
 
 ;; ============= Error Codes ===================================================
 
@@ -34,16 +34,16 @@
       (error -5 {:comment \"Why here?\"\"}) => an ExceptionInfo instance
   "
   ([^long err-code details]
-   (let [err (CUresult/stringFor err-code)]
+   (let [err (get cu-result-codes err-code err-code)]
      (ex-info (format "CUDA error: %s." err)
-              {:name err :code err-code :type :cuda-error :details details})))
+              {:name err :code err-code :type :cuda :details details})))
   ([^long err-code]
    (error err-code nil)))
 
 (defmacro with-check
-  "Evaluates `form` if `status` is not zero (`CUDA_SUCCESS`), otherwise throws
+  "Evaluates `form` if `status` is not zero (`:success`), otherwise throws
   an appropriate `ExceptionInfo` with decoded informative details.
-  It helps fith JCuda methods that return error codes directly, while
+  It helps fith CUDA methods that return error codes directly, while
   returning computation results through side-effects in arguments.
 
   Example:
@@ -51,7 +51,7 @@
       (with-check (some-jcuda-call-that-returns-error-code) result)
   "
   ([status form]
-   `(cu/with-check error ~status ~form))
+   `(utils/with-check error ~status ~form))
   ([status details form]
    `(let [status# ~status]
       (if (= 0 status#)
@@ -64,6 +64,6 @@
   [form]
   `(try ~form
          (catch ExceptionInfo ex-info#
-           (if (= :cuda-error (:type (ex-data ex-info#)))
+           (if (= :cuda (:type (ex-data ex-info#)))
              (:name (ex-data ex-info#))
              (throw ex-info#)))))

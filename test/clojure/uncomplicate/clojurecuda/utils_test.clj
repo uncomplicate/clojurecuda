@@ -14,13 +14,13 @@
  "error tests"
 
  (ex-data (error 0))
- => {:code 0, :details nil, :name "CUDA_SUCCESS", :type :cuda-error}
+ => {:code 0, :details nil, :name :success :type :cuda}
 
  (ex-data (error -43))
- => {:code -43, :details nil, :name "INVALID CUresult: -43", :type :cuda-error}
+ => {:code -43, :details nil, :name -43, :type :cuda}
 
  (ex-data (error 0 "Additional details"))
- => {:code 0, :details "Additional details", :name "CUDA_SUCCESS", :type :cuda-error})
+ => {:code 0, :details "Additional details", :name :success, :type :cuda})
 
 (facts
  "with-check tests"
@@ -33,4 +33,4 @@
  (ex-data (maybe (throw (ex-info "Test Exception" {:data :test}))))
  => (throws clojure.lang.ExceptionInfo)
 
- (:type (ex-data (error -1 nil))) => :cuda-error)
+ (:type (ex-data (error -1 nil))) => :cuda)

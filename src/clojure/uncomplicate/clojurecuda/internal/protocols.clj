@@ -15,20 +15,10 @@
   "An object that represents memory that participates in CUDA operations.
   It can be on the device, or on the host.  Built-in implementations:
   cuda pointers, Java primitive arrays and ByteBuffers"
-  (ptr [this] "`Pointer` to this object.")
-  (size [this] "Memory size of this cuda or host object in bytes.")
-  (memcpy-host* [this host size] [this host size hstream]))
+;; TODO remove this is not needed in JavaCPP  (ptr [this] "`Pointer` to this object.")
+  (memcpy-host* [dst src size] [dst src size hstream]))
 
-(defprotocol HostMem
-  (host-ptr [this] "Host `Pointer` to this object.")
-  (host-buffer [this] "The actual `ByteBuffer` on the host"))
-
-(defprotocol JITOption
-  (put-jit-option [value option options]))
-
+;; TODO do I need this to be in separate namespace?
 (defprotocol ModuleLoad
   (module-load* [data m])
-  (link-add* [data link-state type options]))
-
-(defprotocol WithOffset
-  (with-offset [this ofst]))
+  (link-add* [data link-state type opts vals]))

@@ -10,7 +10,8 @@
   (:require [midje.sweet :refer [facts => roughly]]
             [uncomplicate.commons
              [core :refer [release with-release]]
-             [utils :refer [direct-buffer put-float count-groups]]]
+             [utils :refer [put-float count-groups]]]
+            [uncomplicate.clojure-cpp :refer [float-pointer double-pointer pointer-seq]]
             [uncomplicate.clojurecuda
              [core :refer :all]
              [info :refer :all]
@@ -31,10 +32,7 @@
                                   ["-DREAL=float" "-DACCUMULATOR=double"
                                    (format "-DWGS=%d" wgs)])
                    modl (module prog)
-                   data (let [d (direct-buffer (* cnt Float/BYTES))]
-                          (dotimes [n cnt]
-                            (put-float d n (float n)))
-                          d)
+                   data (float-pointer (range cnt))
                    cu-data (mem-alloc (* cnt Float/BYTES))
                    sum-reduction-horizontal (function modl "sum_reduction_horizontal")
                    sum-horizontal (function modl "sum_reduce_horizontal")]
@@ -53,7 +51,7 @@
       (let [wgs-m 64
             wgs-n 16
             acc-size (* Double/BYTES (max 1 (* cnt-m (count-groups wgs-n cnt-n))))
-            res (double-array cnt-m)]
+            res (double-pointer cnt-m)]
         (with-release [sum-reduction-horizontal (function modl "sum_reduction_horizontal")
                        sum-reduce-horizontal (function modl "sum_reduce_horizontal")
                        cu-acc (mem-alloc acc-size)]
@@ -62,12 +60,12 @@
            (launch-reduce! nil sum-reduce-horizontal sum-reduction-horizontal
                            [cu-acc cu-data] [cu-acc] cnt-m cnt-n wgs-m wgs-n)
            (memcpy-host! cu-acc res)
-           (apply + (seq res)) => (roughly 3.92678032941E12))))
+           (apply + (pointer-seq res)) => (roughly 3.92678032941E12))))
 
       (let [wgs-m 64
             wgs-n 16
             acc-size (* Double/BYTES (max 1 (* cnt-n (count-groups wgs-m cnt-m))))
-            res (double-array cnt-n)]
+            res (double-pointer cnt-n)]
         (with-release [sum-reduction-vertical (function modl "sum_reduction_vertical")
                        sum-reduce-vertical (function modl "sum_reduce_vertical")
                        cu-acc (mem-alloc acc-size)]
@@ -76,4 +74,4 @@
            (launch-reduce! nil sum-reduce-vertical sum-reduction-vertical
                            [cu-acc cu-data] [cu-acc] cnt-n cnt-m wgs-n wgs-m)
            (memcpy-host! cu-acc res)
-           (apply + (seq res)) => (roughly 3.92678032941E12)))))))
+           (apply + (pointer-seq res)) => (roughly 3.92678032941E12)))))))

@@ -9,9 +9,9 @@
 (ns uncomplicate.clojurecuda.examples.jcuda.vector-add-test
   (:require [midje.sweet :refer :all]
             [uncomplicate.commons.core :refer [release with-release]]
+            [uncomplicate.clojure-cpp :refer [float-pointer pointer-seq element-count]]
             [uncomplicate.clojurecuda.core :refer :all])
-  (:import clojure.lang.ExceptionInfo
-           [java.nio ByteBuffer ByteOrder]))
+  (:import clojure.lang.ExceptionInfo))
 
 (init)
 
@@ -20,9 +20,9 @@
     (with-release [prog (compile! (program program-source))
                    m (module prog)
                    add (function m "add")
-                   host-a (float-array [1 2 3])
-                   host-b (float-array [2 3 4])
-                   host-sum (float-array 3)
+                   host-a (float-pointer [1 2 3])
+                   host-b (float-pointer [2 3 4])
+                   host-sum (float-pointer 3)
                    gpu-a (mem-alloc (* Float/BYTES 3))
                    gpu-b (mem-alloc (* Float/BYTES 3))
                    gpu-sum (mem-alloc (* Float/BYTES 3))]
@@ -30,6 +30,6 @@
        "Vector add JCuda example."
        (memcpy-host! host-a gpu-a)
        (memcpy-host! host-b gpu-b)
-       (launch! add (grid-1d (count host-sum)) (parameters (count host-sum) gpu-a gpu-b gpu-sum))
+       (launch! add (grid-1d (element-count host-sum)) (parameters (element-count host-sum) gpu-a gpu-b gpu-sum))
        (synchronize!)
-       (seq (memcpy-host! gpu-sum host-sum)) => (seq [3.0 5.0 7.0])))))
+       (pointer-seq (memcpy-host! gpu-sum host-sum)) => (seq [3.0 5.0 7.0])))))
