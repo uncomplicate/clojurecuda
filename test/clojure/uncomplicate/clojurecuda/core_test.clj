@@ -16,8 +16,7 @@
             [uncomplicate.clojurecuda
              [core :refer :all]
              [info :as info :refer [pci-bus-id-string]]])
-  (:import clojure.lang.ExceptionInfo
-           [java.nio ByteBuffer ByteOrder]));;TODOremove
+  (:import clojure.lang.ExceptionInfo))
 
 ;; ================== Driver tests ======================================================
 
@@ -31,8 +30,7 @@
  (device 0) => truthy
  (device -1) => (throws ExceptionInfo)
  (device 33) => (throws ExceptionInfo)
- ;;(device (pci-bus-id-string (device))) => (device) TODO
- )
+ (device (pci-bus-id-string (device))) => (device))
 
 ;; ===================== Context Management Tests =======================================
 

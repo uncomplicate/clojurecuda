@@ -22,7 +22,6 @@
                      capacity!]]
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
-             [protocols :refer :all]
              [constants :refer :all]
              [impl :refer :all]
              [utils :refer [with-check]]])
@@ -332,13 +331,9 @@
 
   See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
-  ([m data]
-   (module-load* (safe (pointer data)) m)
-   m)
-  ([m data options]
-   (throw (ex-info "TODO"))
-   ;; TODO (module-load-data* m data (enc-jit-options options))
-   m))
+  [m data]
+  (module-load* (safe (pointer data)) m)
+  m)
 
 (defn module
   "Creates a new CUDA module and loads a string, nvrtc program, or binary `data`."

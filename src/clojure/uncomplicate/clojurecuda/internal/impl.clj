@@ -15,7 +15,6 @@
              [utils :as cu :refer [dragan-says-ex]]]
             [uncomplicate.clojure-cpp :as cpp :refer :all]
             [uncomplicate.clojurecuda.internal
-             [protocols :refer :all]
              [constants :refer :all]
              [utils :refer [with-check error]]]
             [clojure.core.async :refer [go >!]])
@@ -33,13 +32,14 @@
 
 ;; ==================== Release resources =======================
 
-;; TODO check whether CUDA Pointers have deallocators! If they do, releasing them should be safe-ish.
-#_(extend-type NativePointerObject
-    Releaseable
-    (release [this]
-      (dragan-says-ex "It is not allowed to use and release raw JCuda objects. Use a safe wrapper."
-                      {:this this})))
 (deftype CUDevice [^int dev]
+  Object
+  (hashCode [x]
+    dev)
+  (equals [x y]
+    (and (instance? CUDevice y) (= dev (.dev ^CUDevice y))))
+  (toString [_]
+    (format "#CUDevice[%d]" dev))
   Wrapper
   (extract [_]
     dev))
@@ -100,6 +100,10 @@
 
 ;; ================== Module Management =====================================
 
+(defprotocol ModuleLoad
+  (module-load* [data m])
+  (link-add* [data link-state type opts vals]))
+
 (defn enc-jit-options [options]
   (map (fn [[option value]]
          [(or (jit-options option)
@@ -132,7 +136,6 @@
                                       (element-count options) options option-values)
       {:file file-name} link-state)))
 
-;; TODO move keyword options decoding to core/link
 (defn link*
   "Invokes CUDA linker on data provided as a vector `[[type source <options> <name>], ...]`.
   Produces a cubin compiled for particular architecture
@@ -268,6 +271,13 @@
 
 ;; ==================== Linear memory ================================================
 
+(defprotocol Mem
+  "An object that represents memory that participates in CUDA operations.
+  It can be on the device, or on the host.  Built-in implementations:
+  CUDA pointers, JavaCPP pointers, Java primitive arrays, and Buffers
+  "
+  (memcpy-host* [dst src size] [dst src size hstream]))
+
 (defn offset ^long [dptr ^long offset]
   (if (<= 0 offset (bytesize dptr))
     (+ (long (extract dptr)) offset)
@@ -275,6 +285,11 @@
                     {:offset offset :size (bytesize dptr)})))
 
 (deftype CUDevicePtr [^LongPointer dptr ^long byte-size master]
+  Object
+  (hashCode [x]
+    (get-entry dptr 0))
+  (equals [x y]
+    (and (instance? CUDevicePtr y) (= (get-entry dptr 0) (get-entry (.dptr ^CUDevicePtr y) 0))))
   Releaseable
   (release [this]
     (if-not (null? dptr)
@@ -328,6 +343,11 @@
   (with-check (cudart/cuMemHostUnregister hp) hp))
 
 (deftype CUPinnedPtr [^Pointer hptr ^long byte-size master release-fn]
+  Object
+  (hashCode [x]
+    (get-entry hptr 0))
+  (equals [x y]
+    (and (instance? CUPinnedPtr y) (= (address hptr) (address (.-hptr ^CUPinnedPtr y)))))
   Releaseable
   (release [_]
     (locking hptr
@@ -429,6 +449,11 @@
     (->CUPinnedPtr hptr (bytesize hptr) true unregister-pinned)))
 
 (deftype CUMappedPtr [^Pointer hptr ^long byte-size master]
+  Object
+  (hashCode [x]
+    (get-entry hptr 0))
+  (equals [x y]
+    (and (instance? CUMappedPtr y) (= (address hptr) (address (.-hptr ^CUMappedPtr y)))))
   Releaseable
   (release [_]
     (locking hptr
