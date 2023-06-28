@@ -22,7 +22,7 @@ public class CUHostFn extends CUhostFn {
         this.fun = fun;
     }
 
-    public void call(Pointer userData) {
+    public void call (Pointer userData) {
         fun.invoke(userData);
     }
 

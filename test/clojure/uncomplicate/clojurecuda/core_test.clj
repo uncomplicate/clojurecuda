@@ -135,21 +135,21 @@
 
 (with-context (context (device 0) :map-host)
   (facts
-   "Stream callbacks."
+   "Host functions."
    (let [ch (chan)]
      (with-release [strm (stream :non-blocking)
                     cuda1 (mem-alloc Float/BYTES)
                     cuda2 (mem-alloc Float/BYTES)
-                    host1 (float-array [173.0])
+                    host1 (float-array [163.0])
                     host2 (float-pointer [12])
-                    cbk (callback ch)]
-       (add-callback! strm cbk)
+                    ch (chan)]
+       (listen! strm ch :host)
        (memcpy-host! host1 cuda1 strm) => cuda1
        (memcpy! cuda1 cuda2 strm) => cuda2
        (synchronize! strm)
        (memcpy-host! cuda2 (float-array 1) strm) => (throws Exception)
-       (get-entry (memcpy-host! cuda2 host2 strm) 0) => 173.0
-       (:data (<!! ch)) => strm))))
+       (get-entry (memcpy-host! cuda2 host2 strm) 0) => 163.0
+       (<!! ch) => :host))))
 
 ;; =============== Memory Management Tests ==============================================
 

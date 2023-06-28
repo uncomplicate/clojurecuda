@@ -17,7 +17,7 @@
              [core :refer [with-release let-release info wrap extract bytesize]]
              [utils :refer [mask count-groups dragan-says-ex]]]
             [uncomplicate.clojure-cpp
-             :refer [null? pointer byte-pointer int-pointer long-pointer size-t-pointer
+             :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer size-t-pointer
                      pointer-pointer get-entry put-entry! element-count safe type-pointer
                      capacity!]]
             [uncomplicate.clojurecuda.info :as cuda-info]
@@ -495,22 +495,29 @@
   ([^CUstream_st hstream]
    (with-check (cudart/cuStreamSynchronize hstream) hstream)))
 
-(defn callback
-  "Creates a stream callback that writes stream callback info into async channel `ch`.
-  Available keys in callback info are `:status` and `:data`."
-  [ch]
-  (->StreamCallback ch))
-
-(defn add-callback!
-  "Adds a [[callback]] to a compute stream, with optional `data` related to the call.
+(defn add-host-fn!
+  "Adds a [[host-fn]] to a compute stream, with optional `data` related to the call.
   If `data` is not provided, places `hstream` under data.
 
   See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
-  ([hstream callback data]
-   (add-callback* hstream callback (safe (pointer data)))
+  ([hstream f data]
+   (add-host-fn* hstream f data)
    hstream)
-  ([hstream callback]
-   (add-callback* hstream callback hstream)
+  ([hstream f]
+   (add-host-fn* hstream f hstream)
+   hstream))
+
+(defn listen!
+  "Adds a [[host-fn]] to a compute stream, with optional `data` related to the call.
+  If `data` is not provided, places `hstream` under data.
+
+  See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
+  ([hstream ch data]
+   (let [data (safe (pointer data))]
+     (add-host-fn* hstream (host-fn* data ch) data)
+     hstream))
+  ([hstream ch]
+   (add-host-fn* hstream (host-fn* hstream ch) hstream)
    hstream))
 
 (defn wait-event!
@@ -633,7 +640,7 @@
   "Creates a CUDA program from the `source-code`, with an optional `name` and an optional
   hash map of `headers` (as strings) and their names."
   ([^String name ^String source-code headers]
-   (program* (byte-pointer name) (byte-pointer source-code)
+   (program* (string-pointer name) (string-pointer source-code)
              (pointer-pointer (into-array String (vals headers)))
              (pointer-pointer (into-array String (keys headers)))))
   ([source-code headers]

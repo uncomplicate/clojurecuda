@@ -28,6 +28,7 @@
            [org.bytedeco.cuda.global cudart nvrtc]
            [org.bytedeco.cuda.cudart CUctx_st CUstream_st CUevent_st CUmod_st CUlinkState_st CUhostFn]
            org.bytedeco.cuda.nvrtc._nvrtcProgram
+           [uncomplicate.clojure_cpp.pointer StringPointer KeywordPointer]
            [uncomplicate.clojurecuda.internal.javacpp CUHostFn CUStreamCallback]))
 
 ;; ==================== Release resources =======================
@@ -39,7 +40,7 @@
   (equals [x y]
     (and (instance? CUDevice y) (= dev (.dev ^CUDevice y))))
   (toString [_]
-    (format "#CUDevice[%d]" dev))
+    (format "#Device[:cuda, %d]" dev))
   Wrapper
   (extract [_]
     dev))
@@ -290,6 +291,8 @@
     (get-entry dptr 0))
   (equals [x y]
     (and (instance? CUDevicePtr y) (= (get-entry dptr 0) (get-entry (.dptr ^CUDevicePtr y) 0))))
+  (toString [_]
+    (format "#DevicePtr[:cuda, 0x%x]" byte-size (address dptr))) ;
   Releaseable
   (release [this]
     (if-not (null? dptr)
@@ -348,6 +351,8 @@
     (get-entry hptr 0))
   (equals [x y]
     (and (instance? CUPinnedPtr y) (= (address hptr) (address (.-hptr ^CUPinnedPtr y)))))
+  (toString [_]
+    (format "#PinnedPtr[:cuda, 0x%x]" (address hptr)))
   Releaseable
   (release [_]
     (locking hptr
@@ -454,6 +459,8 @@
     (get-entry hptr 0))
   (equals [x y]
     (and (instance? CUMappedPtr y) (= (address hptr) (address (.-hptr ^CUMappedPtr y)))))
+  (toString [_]
+    (format "#PinnedPtr[:cuda, 0x%x]" (address hptr)))
   Releaseable
   (release [_]
     (locking hptr
@@ -589,13 +596,12 @@
     CUevent_st (cudart/cuEventQuery obj)
     cudart/CUDA_ERROR_NOT_READY))
 
-;;TODO deprecated. remove in favor of hostfn
 (defrecord StreamCallbackInfo [status data])
 
 (deftype StreamCallback [ch]
   IFn
   (invoke [this hstream status data]
-    (go (>! ch (->StreamCallbackInfo (get cu-result-codes status status) data))))
+    (go (>! ch (->StreamCallbackInfo (get cu-result-codes status status) (extract data)))))
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
 
@@ -606,6 +612,35 @@
   [^CUstream_st hstream ^IFn callback ^Pointer data]
   (let-release [callback (CUStreamCallback. callback)]
     (with-check (cudart/cuStreamAddCallback hstream callback data 0) hstream)))
+
+(defprotocol HostFn
+  (host-fn* [type ch]))
+
+(extend-type KeywordPointer
+  HostFn
+  (host-fn* [_ ch]
+    (fn [data]
+      (go (>! ch (get-keyword (byte-pointer data)))))))
+
+(extend-type StringPointer
+  HostFn
+  (host-fn* [_ ch]
+    (fn [data]
+      (go (>! ch (get-string (byte-pointer data)))))))
+
+(extend-type Pointer
+  HostFn
+  (host-fn* [_ ch]
+    (fn [data]
+      (go (>! ch data)))))
+
+(defn add-host-fn*
+  "Adds a [[HostFn]] to a compute stream, with optional `data` related to the call.
+  See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
+  [^CUstream_st hstream ^IFn f ^Pointer data]
+  (let-release [hostfn (CUHostFn. f)]
+    (with-check (cudart/cuLaunchHostFunc hstream hostfn data)
+      hstream)))
 
 (defn attach-mem*
   "Attach memory of size `size`, specified by an integer `flag` to a `hstream` asynchronously.
@@ -648,4 +683,37 @@
       (cudart/cudaDeviceGetP2PAttribute ^IntPointer res attribute dev peer)
       (pos? (int (get-entry res 0))))))
 
-;;TODO print-methods
+;; ================ print-method ============================================
+
+(defn format-pointer [title p ^java.io.Writer w]
+  (.write w (format "#%s[:cuda, 0x%x]" title (address p))))
+
+(defmethod print-method CUDevice [p ^java.io.Writer w]
+  (.write w (str p)))
+
+(defmethod print-method CUctx_st [p w]
+  (format-pointer "Context" p w))
+
+(defmethod print-method CUstream_st [p w]
+  (format-pointer "Stream" p w))
+
+(defmethod print-method CUevent_st [p w]
+  (format-pointer "Event" p w))
+
+(defmethod print-method CUmod_st [p w]
+  (format-pointer "Module" p w))
+
+(defmethod print-method CUlinkState_st [p w]
+  (format-pointer "LinkState" p w))
+
+(defmethod print-method _nvrtcProgram [p w]
+  (format-pointer "Program" p w))
+
+(defmethod print-method CUDevicePtr [p w]
+  (format-pointer "DevicePtr" p w))
+
+(defmethod print-method CUPinnedPtr [p w]
+  (format-pointer "PinnedPtr" p w))
+
+(defmethod print-method CUMappedPtr [p w]
+  (format-pointer "MappedPtr" p w))

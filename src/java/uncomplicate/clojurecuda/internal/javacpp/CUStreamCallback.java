@@ -22,7 +22,7 @@ public class CUStreamCallback extends CUstreamCallback {
         this.fun = fun;
     }
 
-    public void call(CUstream_st hstream, int status, Pointer userData) {
+    public void call (CUstream_st hstream, int status, Pointer userData) {
         fun.invoke(hstream, status, userData);
     }
 
