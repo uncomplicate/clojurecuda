@@ -221,7 +221,7 @@
        (pointer-seq (memcpy-host! cuda1 (int-pointer 2))) => [24 34]
        (memcpy-host! (memset! cuda1 0 1) pinned-host) => pinned-host
        (pointer-seq (int-pointer pinned-host)) => [0 34]
-       (memcpy-host! (memset! cuda1 0) pinned-host) => pinned-host
+       (memcpy-host! (memset! cuda1 (int 0)) pinned-host) => pinned-host
        (pointer-seq (int-pointer pinned-host)) => [0 0]) )
 
     (when (and (info/managed-memory dev) (info/concurrent-managed-access dev))

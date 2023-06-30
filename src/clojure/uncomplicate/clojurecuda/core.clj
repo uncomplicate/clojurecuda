@@ -14,7 +14,7 @@
   Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
-             [core :refer [with-release let-release info wrap extract bytesize]]
+             [core :refer [with-release let-release info wrap extract bytesize sizeof]]
              [utils :refer [mask count-groups dragan-says-ex]]]
             [uncomplicate.clojure-cpp
              :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer size-t-pointer
@@ -48,7 +48,7 @@
    (with-release [res (int-pointer 1)]
      (with-check
        (if (number? id)
-         (cudart/cuDeviceGet res ^long id)
+         (cudart/cuDeviceGet res (long id))
          (cudart/cuDeviceGetByPCIBusId res ^String id))
        {:device-id id}
        (->CUDevice (get-entry res 0)))))
@@ -188,23 +188,27 @@
    (memcpy-host* dst src (min (bytesize src) (bytesize dst)))
    dst))
 
-;; TODO implement a memset* protocol for all primitives.
 (defn memset!
   "Sets `len` or all 32-bit segments of `dptr` to 32-bit integer `value`. If `hstream` is
   provided, does this asynchronously.
 
   See [cuMemset32D](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
-  ([dptr ^long value]
-   (memset! dptr value (long (/ (long (bytesize dptr)) Integer/BYTES))))
-  ([dptr ^long value arg]
+  ([dptr value]
+   (memset* value (extract dptr) (quot (bytesize dptr) (sizeof value)))
+   dptr)
+  ([dptr value arg]
    (if (integer? arg)
-     (with-check (cudart/cuMemsetD32 (extract dptr) value arg) dptr)
-     (memset! dptr value (/ (long (bytesize dptr)) Integer/BYTES) arg)))
-  ([dptr ^long value ^long len hstream]
+     (do (check-size dptr 0 (* (sizeof value) (long arg)))
+         (memset* value (extract dptr) arg))
+     (memset* value (extract dptr) (quot (bytesize dptr) (sizeof value)) arg))
+   dptr)
+  ([dptr value ^long n hstream]
    (if hstream
-     (with-check (cudart/cuMemsetD32Async (extract dptr) value len hstream) dptr)
-     (memset! dptr value len))))
+     (do (check-size dptr 0 (* (sizeof value) n))
+         (memset* value (extract dptr) n hstream))
+     (memset! dptr value n))
+   dptr))
 
 ;; ==================== Linear memory ================================================
 
@@ -247,11 +251,13 @@
 ;; =================== Pinned Memory ================================================
 
 (defn mem-alloc-pinned
-  "Allocates `size` bytes of page-locked, 'pinned' on the host, using keyword `flags`.
+  "Allocates `size` bytes of page-locked memory, 'pinned' on the host, using keyword `flags`.
   For available flags, see [constants/mem-host-alloc-flags]
 
   Valid flags are: `:portable`, `:devicemap` and `:writecombined`. The default is none.
   The memory is not cleared. `size` must be greater than `0`.
+
+  Pinned memory is optimized for the `memcpy-host!` operation, while 'mapped' memory is optimized for `memcpy!`.
 
   See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
@@ -283,6 +289,8 @@
   Valid flags are: `:portable`, and `:devicemap`. The default is none.
   The memory is not cleared.
 
+  Pinned memory is optimized for the `memcpy-host!` operation, while 'mapped' memory is optimized for `memcpy!`.
+
   See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   ([memory flags]
@@ -295,7 +303,12 @@
    (mem-host-register* memory 0)))
 
 (defn mem-alloc-mapped
-  "TODO"
+  "Allocates `size` bytes of memory 'mapped' to the host.
+
+  Mapped memory is optimized for the `memcpy!` operation, while 'pinned' memory is optimized for `memcpy-host!`.
+
+  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
+  "
   ([^long size]
    (mem-alloc-host* (max 0 size)))
   ([^long size type]

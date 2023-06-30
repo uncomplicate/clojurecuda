@@ -272,6 +272,63 @@
 
 ;; ==================== Linear memory ================================================
 
+(defprotocol MemSet
+  (memset* [this dptr n] [this dptr n hstream]))
+
+(extend-type Byte
+  MemSet
+  (memset*
+    ([this dptr n]
+     (with-check (cudart/cuMemsetD8 dptr this n) dptr))
+    ([this dptr n hstream]
+     (with-check (cudart/cuMemsetD8Async dptr this n hstream) dptr))))
+
+(extend-type Short
+  MemSet
+  (memset*
+    ([this dptr n]
+     (with-check (cudart/cuMemsetD16 dptr this n) dptr))
+    ([this dptr n hstream]
+     (with-check (cudart/cuMemsetD16Async dptr this n hstream) dptr))))
+
+(extend-type Integer
+  MemSet
+  (memset*
+    ([this dptr n]
+     (with-check (cudart/cuMemsetD32 dptr this n) dptr))
+    ([this dptr n hstream]
+     (with-check (cudart/cuMemsetD32Async dptr this n hstream) dptr))))
+
+(extend-type Float
+  MemSet
+  (memset*
+    ([this dptr n]
+     (with-check (cudart/cuMemsetD32 dptr (Float/floatToIntBits this) n) dptr))
+    ([this dptr n hstream]
+     (with-check (cudart/cuMemsetD32Async dptr (Float/floatToIntBits this) n hstream) dptr))))
+
+(extend-type Long
+  MemSet
+  (memset*
+    ([this dptr n]
+     (if (= (int this) this)
+       (with-check (cudart/cuMemsetD32 dptr (int this) n) dptr)
+       (dragan-says-ex "This long value is too big for the memset! function."
+                       {:value this :max (int this)})))
+    ([this dptr n hstream]
+     (if (= (int this) this)
+       (with-check (cudart/cuMemsetD32Async dptr (int this) n hstream) dptr)
+       (dragan-says-ex "This long value is too big for the memset! function."
+                       {:value this :max (int this)})))))
+
+(extend-type Double
+  MemSet
+  (memset*
+    ([this dptr n]
+     (memset* dptr (Double/doubleToLongBits this) n))
+    ([this dptr n hstream]
+     (memset* dptr (Double/doubleToLongBits this) n hstream))))
+
 (defprotocol Mem
   "An object that represents memory that participates in CUDA operations.
   It can be on the device, or on the host.  Built-in implementations:
