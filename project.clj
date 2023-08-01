@@ -18,7 +18,7 @@
                  [uncomplicate/commons "0.14.0-SNAPSHOT"]
                  [uncomplicate/fluokitten "0.9.1"]
                  [org.uncomplicate/clojure-cpp "0.2.0-SNAPSHOT"]
-                 [org.bytedeco/cuda-platform "12.1-8.9-1.5.9"]]
+                 [org.bytedeco/cuda-platform "12.1-8.9-1.5.10-SNAPSHOT"]]
 
   :codox {:metadata {:doc/format :markdown}
           :src-dir-uri "http://github.com/uncomplicate/clojurecuda/blob/master/"
@@ -38,8 +38,9 @@
                                  *unchecked-math* :warn-on-boxed
                                  *print-length* 128}
                    :dependencies [[midje "1.10.9"]
-                                  [org.bytedeco/cuda-platform-redist "12.1-8.9-1.5.9"]]
+                                  [org.bytedeco/cuda-platform-redist "12.1-8.9-1.5.10-SNAPSHOT"]]
                    :jvm-opts ^:replace ["-Djavacpp.platform=linux-x86_64"]}}
+
   :repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
   :javac-options ["-target" "1.8" "-source" "1.8" "-Xlint:-options"]
   :source-paths ["src/clojure" "src/cuda"]

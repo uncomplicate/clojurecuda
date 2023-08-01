@@ -225,11 +225,13 @@
       (->CUDevicePtr dptr size true))))
 
 (defn mem-sub-region
-  "Creates a [[CUDevicePtr]] that references a sub-region of `mem` from origin to `byte-count`."
-  [mem ^long origin ^long byte-count]
-  (check-size mem origin byte-count)
-  (let-release [sub-dptr (long-pointer 1)]
-    (->CUDevicePtr (put-entry! sub-dptr 0 (offset mem origin)) byte-count false)))
+  "Creates a [[CUDevicePtr]] that references a sub-region of `mem` from `origin` to `byte-count`."
+  ([mem ^long origin ^long byte-count]
+   (check-size mem origin byte-count)
+   (let-release [sub-dptr (long-pointer 1)]
+     (->CUDevicePtr (put-entry! sub-dptr 0 (offset mem origin)) byte-count false)))
+  ([mem ^long origin]
+   (mem-sub-region mem origin (bytesize mem))))
 
 (defn mem-alloc-managed
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory

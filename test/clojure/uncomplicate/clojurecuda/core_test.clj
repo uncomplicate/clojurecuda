@@ -196,6 +196,7 @@
        (memcpy-host! pinned-host cuda1) => cuda1
        (put-entry! pinned-host 0 11)
        (memcpy! cuda1 pinned-host) => pinned-host
+       (synchronize!)
        (get-entry pinned-host 0) => 13.0
        (pointer-seq (memcpy-host! cuda1 (float-pointer 1))) => [13.0]))
 
@@ -209,6 +210,7 @@
        (memcpy-host! mapped-host cuda1) => cuda1
        (get-entry (memcpy-host! cuda1 (float-pointer 1)) 0) => 14.0
        (get-entry (memcpy! cuda1 mapped-host2)) => 14.0
+       (synchronize!)
        (seq mapped-host2) => [14.0]))
 
     (facts
@@ -222,6 +224,7 @@
        (memcpy-host! (memset! cuda1 0 1) pinned-host) => pinned-host
        (pointer-seq (int-pointer pinned-host)) => [0 34]
        (memcpy-host! (memset! cuda1 (int 0)) pinned-host) => pinned-host
+       (synchronize!)
        (pointer-seq (int-pointer pinned-host)) => [0 0]) )
 
     (when (and (info/managed-memory dev) (info/concurrent-managed-access dev))
