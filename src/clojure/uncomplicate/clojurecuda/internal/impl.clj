@@ -342,30 +342,30 @@
     (dragan-says-ex "Requested bytes are out of the bounds of this device pointer."
                     {:offset offset :size (bytesize dptr)})))
 
-(deftype CUDevicePtr [^LongPointer dptr ^long byte-size master]
+(deftype CUDevicePtr [^LongPointer daddr ^long byte-size master]
   Object
   (hashCode [x]
-    (get-entry dptr 0))
+    (hash-combine (hash daddr) byte-size))
   (equals [x y]
-    (and (instance? CUDevicePtr y) (= (get-entry dptr 0) (get-entry (.dptr ^CUDevicePtr y) 0))))
+    (and (instance? CUDevicePtr y) (= (get-entry daddr 0) (get-entry (.daddr ^CUDevicePtr y) 0))))
   (toString [_]
-    (format "#DevicePtr[:cuda, 0x%x]" byte-size (address dptr))) ;
+    (format "#DevicePtr[:cuda, 0x%x]" byte-size (address daddr))) ;
   Releaseable
   (release [this]
-    (if-not (null? dptr)
-      (locking dptr
+    (if-not (null? daddr)
+      (locking daddr
         (when master
-          (with-check (cudart/cuMemFree (get-entry dptr 0)) true)
-          (release dptr))))
-    true)
+          (with-check (cudart/cuMemFree (get-entry daddr 0)) true)
+          (release daddr)))
+      true))
   Wrapper
   (extract [_]
-    (get-entry dptr 0))
+    (get-entry daddr 0))
   PointerCreator
   (pointer* [_]
-    dptr)
+    daddr)
   (pointer* [this i]
-    (pointer dptr i))
+    (pointer daddr i))
   Bytes
   (bytesize* [_]
     byte-size)
@@ -376,9 +376,9 @@
     Byte/BYTES)
   Mem
   (memcpy-host* [this src byte-count]
-    (with-check (cudart/cuMemcpyHtoD (get-entry dptr 0) (pointer src) byte-count) this))
+    (with-check (cudart/cuMemcpyHtoD (get-entry daddr 0) (pointer src) byte-count) this))
   (memcpy-host* [this src byte-count hstream]
-    (with-check (cudart/cuMemcpyHtoDAsync (get-entry dptr 0) (pointer src) byte-count hstream) this)))
+    (with-check (cudart/cuMemcpyHtoDAsync (get-entry daddr 0) (pointer src) byte-count hstream) this)))
 
 (defn mem-alloc-managed*
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
@@ -390,9 +390,89 @@
   See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   ([^long size ^long flag]
-   (let-release [dptr (long-pointer 1)]
-     (with-check (cudart/cuMemAllocManaged dptr size flag)
-       (->CUDevicePtr dptr size true)))))
+   (let-release [daddr (long-pointer 1)]
+     (with-check (cudart/cuMemAllocManaged daddr size flag)
+       (->CUDevicePtr daddr size true)))))
+
+;; =================== Runtime Memory ===============================================
+
+(deftype CURuntimePtr [^Pointer dptr ^long byte-size master]
+  Object
+  (hashCode [x]
+    (hash-combine (hash dptr) byte-size))
+  (equals [x y]
+    (and (instance? CURuntimePtr y) (= dptr (.dptr ^CURuntimePtr y) 0)))
+  (toString [_]
+    (format "#RuntimePtr[:cuda, 0x%x]" byte-size (address dptr))) ;
+  Releaseable
+  (release [this]
+    (if-not (null? dptr)
+      (locking dptr
+        (when master
+          (with-check (cudart/cudaFree dptr) true)))
+      true))
+  Wrapper
+  (extract [_]
+    (address dptr))
+  PointerCreator
+  (pointer* [_]
+    dptr)
+  (pointer* [this i]
+    (pointer dptr i))
+  TypedPointerCreator
+  (byte-pointer [_]
+    (byte-pointer dptr))
+  (clong-pointer [_]
+    (clong-pointer dptr))
+  (size-t-pointer [_]
+    (clong-pointer dptr))
+  (pointer-pointer [_]
+    (pointer-pointer dptr))
+  (char-pointer [_]
+    (char-pointer dptr))
+  (short-pointer [_]
+    (short-pointer dptr))
+  (int-pointer [_]
+    (int-pointer dptr))
+  (long-pointer [_]
+    (long-pointer dptr))
+  (float-pointer [_]
+    (float-pointer dptr))
+  (double-pointer [_]
+    (double-pointer dptr))
+  Bytes
+  (bytesize* [_]
+    byte-size)
+  Entries
+  (size* [_]
+    (element-count dptr))
+  (sizeof* [_]
+    (sizeof* dptr))
+  Seqable
+  (seq [a]
+    (pointer-seq dptr))
+  Mem
+  (memcpy-host* [this src byte-count]
+    (with-check (cudart/cudaMemcpy dptr (pointer src) byte-count cudart/cudaMemcpyDefault) this))
+  (memcpy-host* [this src byte-count hstream]
+    (with-check (cudart/cudaMemcpyAsync dptr (pointer src) byte-count cudart/cudaMemcpyDefault hstream)
+      this)))
+
+(defn malloc-device*
+  "Allocates `size` bytes of device memory.
+
+  The memory is not cleared. `size` must be greater than `0`.
+
+  See [cudaMalloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
+  "
+  ([^long size]
+   (let-release [p (byte-pointer nil)]
+     (with-check (cudart/cudaMalloc p size)
+       (->CURuntimePtr (capacity! p size) size true))))
+  ([^long size constructor]
+   (let-release [p (byte-pointer nil)]
+     (with-check (cudart/cudaMalloc p size)
+       (->CURuntimePtr (constructor (capacity! p size)) size true)))))
 
 ;; =================== Pinned Memory ================================================
 
@@ -405,17 +485,18 @@
 (deftype CUPinnedPtr [^Pointer hptr ^long byte-size master release-fn]
   Object
   (hashCode [x]
-    (get-entry hptr 0))
+    (hash-combine (hash hptr) byte-size))
   (equals [x y]
     (and (instance? CUPinnedPtr y) (= (address hptr) (address (.-hptr ^CUPinnedPtr y)))))
   (toString [_]
     (format "#PinnedPtr[:cuda, 0x%x]" (address hptr)))
   Releaseable
   (release [_]
-    (locking hptr
-      (when master
-        (release-fn hptr)))
-    true)
+    (if-not (null? hptr)
+      (locking hptr
+        (when master
+          (release-fn hptr)))
+      true))
   Wrapper
   (extract [_]
     (address hptr))
@@ -450,9 +531,9 @@
     byte-size)
   Entries
   (size* [_]
-    byte-size)
+    (element-count hptr))
   (sizeof* [_]
-    Byte/BYTES)
+    (.sizeof hptr))
   Seqable
   (seq [a]
     (pointer-seq hptr))
@@ -513,7 +594,7 @@
 (deftype CUMappedPtr [^Pointer hptr ^long byte-size master]
   Object
   (hashCode [x]
-    (get-entry hptr 0))
+    (hash-combine (hash hptr) byte-size))
   (equals [x y]
     (and (instance? CUMappedPtr y) (= (address hptr) (address (.-hptr ^CUMappedPtr y)))))
   (toString [_]
@@ -559,9 +640,9 @@
     byte-size)
   Entries
   (size* [_]
-    byte-size)
+    (element-count hptr))
   (sizeof* [_]
-    Byte/BYTES)
+    (.sizeof hptr))
   Seqable
   (seq [a]
     (pointer-seq hptr))

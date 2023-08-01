@@ -250,6 +250,17 @@
   ([^long size]
    (mem-alloc-managed* size cudart/CU_MEM_ATTACH_GLOBAL)))
 
+;; =================== Runtime API Memory ================================================
+
+(defn mem-alloc-device
+  "TODO Runtime API cudaMalloc"
+  ([^long size type]
+   (if-let [t (type-pointer type)]
+     (malloc-device* size t)
+     (throw (ex-info (format "Unknown data type: %s." (str type))))))
+  ([^long size]
+   (malloc-device* size)))
+
 ;; =================== Pinned Memory ================================================
 
 (defn mem-alloc-pinned

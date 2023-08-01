@@ -187,6 +187,19 @@
              (pointer-seq (memcpy-host! cuda (float-pointer 5))) => [1.0 2.0 3.0 4.0 5.0]))))
 
     (facts
+     "Runtime cudaMalloc tests."
+     (with-release [cuda1 (mem-alloc-device Float/BYTES :float)
+                    host1 (float-pointer [100.0])
+                    host2 (mem-alloc-mapped Float/BYTES :float)
+                    zero (mem-alloc-device 0)]
+       zero => truthy
+       (bytesize cuda1) => Float/BYTES
+       (memcpy-host! host1 cuda1) => cuda1
+       (synchronize!)
+       (pointer-seq (memcpy-host! cuda1 (float-pointer 1))) => [100.0]
+       (seq (memcpy! cuda1 host2)) => [100.0]))
+
+    (facts
      "Pinned memory tests."
      (with-release [pinned-host (mem-alloc-pinned Float/BYTES :float :devicemap)
                     cuda1 (mem-alloc Float/BYTES)]
