@@ -141,29 +141,26 @@
     (dragan-says-ex "Requested bytes are out of the bounds of this device pointer."
                     {:offset offset :requested byte-count :available (bytesize ptr)})))
 
+
 (defn memcpy!
   "Copies `byte-count` or all possible device memory from `src` to `dst`. If `hstream` is supplied,
   executes asynchronously.
 
   See [cuMemcpy](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)"
   ([src dst]
-   (memcpy! src dst 0 0 (min (bytesize src) (bytesize dst)) nil))
+   (memcpy! src dst (min (bytesize src) (bytesize dst)) nil))
   ([src dst count-or-stream]
-   (memcpy! src dst 0 0 count-or-stream))
-  ([src dst src-offset dst-offset count-or-stream]
    (if (number? count-or-stream)
-     (memcpy! src dst src-offset dst-offset count-or-stream nil)
-     (memcpy! src dst src-offset dst-offset (min (bytesize src) (bytesize dst)) count-or-stream)))
+     (do (check-size src 0 count-or-stream)
+         (check-size dst 0 count-or-stream)
+         (memcpy* dst src count-or-stream nil))
+     (memcpy! src dst (min (bytesize src) (bytesize dst)) count-or-stream))
+   dst)
   ([src dst ^long byte-count hstream]
-   (memcpy! src dst 0 0 byte-count hstream))
-  ([src dst src-offset dst-offset byte-count hstream]
-   (check-size src src-offset byte-count)
-   (check-size dst dst-offset byte-count)
-   (with-check
-     (if hstream
-       (cudart/cuMemcpyAsync (offset dst dst-offset) (offset src src-offset) byte-count hstream)
-       (cudart/cuMemcpy (offset dst dst-offset) (offset src src-offset) byte-count))
-     dst)))
+   (check-size src 0 byte-count)
+   (check-size dst 0 byte-count)
+   (memcpy* dst src byte-count hstream)
+   dst))
 
 (defn memcpy-host!
   "Copies `byte-count` or all possible memory from `src` to `dst`, one of which
@@ -195,34 +192,22 @@
   See [cuMemset32D](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([dptr value]
-   (memset* value (extract dptr) (quot (bytesize dptr) (sizeof value)))
+   (memset* value (cu-address* dptr) (quot (bytesize dptr) (sizeof value)))
    dptr)
   ([dptr value arg]
    (if (integer? arg)
      (do (check-size dptr 0 (* (sizeof value) (long arg)))
-         (memset* value (extract dptr) arg))
-     (memset* value (extract dptr) (quot (bytesize dptr) (sizeof value)) arg))
+         (memset* value (cu-address* dptr) arg))
+     (memset* value (cu-address* dptr) (quot (bytesize dptr) (sizeof value)) arg))
    dptr)
   ([dptr value ^long n hstream]
    (if hstream
      (do (check-size dptr 0 (* (sizeof value) n))
-         (memset* value (extract dptr) n hstream))
+         (memset* value (cu-address* dptr) n hstream))
      (memset! dptr value n))
    dptr))
 
 ;; ==================== Linear memory ================================================
-
-(defn mem-alloc
-  "Allocates the `size` bytes of memory on the device.
-
-  The old memory content is not cleared. `size` must be greater than `0`.
-
-  See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
-  "
-  [^long size]
-  (let-release [dptr (long-pointer 1)]
-    (with-check (cudart/cuMemAlloc ^LongPointer dptr size)
-      (->CUDevicePtr dptr size true))))
 
 (defn mem-sub-region
   "Creates a [[CUDevicePtr]] that references a sub-region of `mem` from `origin` to `byte-count`."
@@ -233,7 +218,7 @@
   ([mem ^long origin]
    (mem-sub-region mem origin (bytesize mem))))
 
-(defn mem-alloc-managed
+(defn mem-alloc-driver
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
   system, specified by a keyword `flag`.
 
@@ -252,14 +237,19 @@
 
 ;; =================== Runtime API Memory ================================================
 
-(defn mem-alloc-device
-  "TODO Runtime API cudaMalloc"
+(defn mem-alloc-runtime
+  "Allocates the `size` bytes of memory on the device.
+
+  The old memory content is not cleared. `size` must be greater than `0`.
+
+  See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
+  "
   ([^long size type]
    (if-let [t (type-pointer type)]
-     (malloc-device* size t)
+     (malloc-runtime* (max 0 size) t)
      (throw (ex-info (format "Unknown data type: %s." (str type))))))
   ([^long size]
-   (malloc-device* size)))
+   (malloc-runtime* (max 0 size))))
 
 ;; =================== Pinned Memory ================================================
 
@@ -426,7 +416,7 @@
   "Sets the `i`th parameter in a parameter array `arr`"
   [^PointerPointer pp ^long i parameter]
   (if (< -1 i (element-count pp))
-    (put-entry! pp i (pointer parameter))
+    (set-parameter* parameter (extract pp) i)
     (throw (ex-info "Index out of bounds." {:requested i :available (element-count pp)})))
   pp)
 
@@ -568,15 +558,15 @@
   activity instead of whole-GPU activity.
 
   See [cuStreamAttachMemAsync](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)."
-  ([^CUstream_st hstream mem size flag]
-   (let [hstream' (cond hstream (extract hstream)
-                        (and (= :global flag) (null? hstream)) nil
-                        :else (throw (ex-info "nil stream is a virtual global stream and not a specific stream that may be only used with :global mem-attach flag."
-                                              {:flag flag :available mem-attach-flags})))]
-     (attach-mem* hstream' (extract mem) size
-                  (or (mem-attach-flags flag)
-                      (throw (ex-info "Unknown mem-attach flag."
-                                      {:flag flag :available mem-attach-flags})))))
+  ([^CUstream_st hstream mem ^long size flag]
+   (attach-mem* (or (extract hstream)
+                    (when-not (= :global flag)
+                      (throw (ex-info "nil stream is a virtual global stream and not a specific stream that may be only used with :global mem-attach flag."
+                                      {:flag flag :available mem-attach-flags}))))
+                (cu-address* mem) size
+                (or (mem-attach-flags flag)
+                    (throw (ex-info "Unknown mem-attach flag."
+                                    {:flag flag :available mem-attach-flags}))))
    hstream)
   ([mem size flag]
    (attach-mem! default-stream mem size flag)))

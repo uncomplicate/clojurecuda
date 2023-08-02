@@ -281,7 +281,44 @@
    cudart/CUDA_ERROR_UNSUPPORTED_DEVSIDE_SYNC :devside-sync
    cudart/CUDA_ERROR_UNSUPPORTED_EXEC_AFFINITY :exec-affinity
    cudart/CUDA_ERROR_UNSUPPORTED_LIMIT :unsupported-limit
-   cudart/CUDA_ERROR_UNSUPPORTED_PTX_VERSION :unsupported-ptx-version})
+   cudart/CUDA_ERROR_UNSUPPORTED_PTX_VERSION :unsupported-ptx-version
+   cudart/cudaErrorAddressOfConstant :address-of-constant
+   cudart/cudaErrorApiFailureBase :failure-base
+   cudart/cudaErrorCallRequiresNewerDriver :call-requires-newer-driver
+   cudart/cudaErrorDuplicateSurfaceName :duplicate-surface-name
+   cudart/cudaErrorDuplicateTextureName :duplicate-texture-name
+   cudart/cudaErrorDuplicateVariableName :duplicate-variable-name
+   cudart/cudaErrorIncompatibleDriverContext :incompatible-context
+   cudart/cudaErrorInsufficientDriver :insufficient-driver
+   cudart/cudaErrorInvalidChannelDescriptor :invalid-channel-descriptor
+   cudart/cudaErrorInvalidConfiguration :invalid-configuration
+   cudart/cudaErrorInvalidDeviceFunction :invalid-device-function
+   cudart/cudaErrorInvalidDevicePointer :invalid-device-pointer
+   cudart/cudaErrorInvalidFilterSetting :invalid-filter-setting
+   cudart/cudaErrorInvalidHostPointer :invalid-host-pointer
+   cudart/cudaErrorInvalidMemcpyDirection :invalid-memcpy-direction
+   cudart/cudaErrorInvalidNormSetting :invalid-norm-setting
+   cudart/cudaErrorInvalidPitchValue :invalid-pitch-value
+   cudart/cudaErrorInvalidSurface :invalid-surface
+   cudart/cudaErrorInvalidSymbol :invalid-symbol
+   cudart/cudaErrorInvalidTexture :invalid-texture
+   cudart/cudaErrorInvalidTextureBinding :invalid-texture-binding
+   cudart/cudaErrorLaunchFileScopedSurf :launch-file-scoped-surf
+   cudart/cudaErrorLaunchFileScopedTex :launch-file-scoped-tex
+   cudart/cudaErrorLaunchMaxDepthExceeded :max-depth-exceeded
+   cudart/cudaErrorLaunchPendingCountExceeded :launch-pending-count-exceeded
+   cudart/cudaErrorMemoryValueTooLarge :memory-value-too-large
+   cudart/cudaErrorMissingConfiguration :missing-configuration
+   cudart/cudaErrorMixedDeviceExecution :mixed-device-execution
+   cudart/cudaErrorNotPermitted :not-permitted
+   cudart/cudaErrorNotYetImplemented :not-yet-implemented
+   cudart/cudaErrorPriorLaunchFailure :prior-launch-failure
+   cudart/cudaErrorSoftwareValidityNotEstablished :software-validity-not-established
+   cudart/cudaErrorStartupFailure :startup-failure
+   cudart/cudaErrorSyncDepthExceeded :sync-depth-exceeded
+   cudart/cudaErrorSynchronizationError :synchronization-error
+   cudart/cudaErrorTextureFetchFailed :texture-fetch-failed
+   cudart/cudaErrorTextureNotBound :texture-not-bound})
 
 (def ^{:const true
        :doc "CUDA Error messages as defined in nvrtc."}

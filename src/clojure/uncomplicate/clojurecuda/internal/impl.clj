@@ -31,6 +31,19 @@
            [uncomplicate.clojure_cpp.pointer StringPointer KeywordPointer]
            [uncomplicate.clojurecuda.internal.javacpp CUHostFn CUStreamCallback]))
 
+(defprotocol CUPointer
+  (cu-pointer* [this])
+  (cu-address* [this])
+  (device? [this]))
+
+(defprotocol Parameter
+  (set-parameter* [this pp i]))
+
+(extend-type Object
+  Parameter
+  (set-parameter* [parameter pp i]
+    (put-entry! pp i (pointer parameter))))
+
 ;; ==================== Release resources =======================
 
 (deftype CUDevice [^int dev]
@@ -329,16 +342,17 @@
     ([this dptr n hstream]
      (memset* dptr (Double/doubleToLongBits this) n hstream))))
 
-(defprotocol Mem
+(defprotocol Memcpy
   "An object that represents memory that participates in CUDA operations.
   It can be on the device, or on the host.  Built-in implementations:
   CUDA pointers, JavaCPP pointers, Java primitive arrays, and Buffers
   "
-  (memcpy-host* [dst src size] [dst src size hstream]))
+  (memcpy-host* [dst src size] [dst src size hstream])
+  (memcpy* [dst src size] [dst src size hstream]))
 
 (defn offset ^long [dptr ^long offset]
   (if (<= 0 offset (bytesize dptr))
-    (+ (long (extract dptr)) offset)
+    (+ (long (cu-address* dptr)) offset)
     (dragan-says-ex "Requested bytes are out of the bounds of this device pointer."
                     {:offset offset :size (bytesize dptr)})))
 
@@ -347,9 +361,9 @@
   (hashCode [x]
     (hash-combine (hash daddr) byte-size))
   (equals [x y]
-    (and (instance? CUDevicePtr y) (= (get-entry daddr 0) (get-entry (.daddr ^CUDevicePtr y) 0))))
+    (and (instance? CUDevicePtr y) (= (get-entry daddr 0) (get-entry (.-daddr ^CUDevicePtr y) 0))))
   (toString [_]
-    (format "#DevicePtr[:cuda, 0x%x]" byte-size (address daddr))) ;
+    (format "#DevicePtr[:cuda, 0x%x, %d bytes]" (get-entry daddr 0) byte-size))
   Releaseable
   (release [this]
     (if-not (null? daddr)
@@ -360,12 +374,14 @@
       true))
   Wrapper
   (extract [_]
-    (get-entry daddr 0))
-  PointerCreator
-  (pointer* [_]
+    (extract daddr))
+  CUPointer
+  (cu-pointer* [_]
     daddr)
-  (pointer* [this i]
-    (pointer daddr i))
+  (cu-address* [_]
+    (get-entry daddr 0))
+  (device? [_]
+    true)
   Bytes
   (bytesize* [_]
     byte-size)
@@ -374,11 +390,26 @@
     byte-size)
   (sizeof* [_]
     Byte/BYTES)
-  Mem
+  Parameter
+  (set-parameter* [parameter pp i]
+    (put-entry! pp i daddr))
+  Memcpy
   (memcpy-host* [this src byte-count]
-    (with-check (cudart/cuMemcpyHtoD (get-entry daddr 0) (pointer src) byte-count) this))
+    (with-check
+      (cudart/cuMemcpyHtoD (get-entry daddr 0) (safe (pointer src)) byte-count)
+      this))
   (memcpy-host* [this src byte-count hstream]
-    (with-check (cudart/cuMemcpyHtoDAsync (get-entry daddr 0) (pointer src) byte-count hstream) this)))
+    (with-check
+      (cudart/cuMemcpyHtoDAsync (get-entry daddr 0) (safe (pointer src)) byte-count hstream)
+      this))
+  (memcpy* [this src byte-count]
+    (with-check
+      (cudart/cuMemcpy (get-entry daddr 0) (cu-address* src) byte-count)
+      this))
+  (memcpy* [this src byte-count hstream]
+    (with-check
+      (cudart/cuMemcpyAsync (get-entry daddr 0) (cu-address* src) byte-count hstream)
+      this)))
 
 (defn mem-alloc-managed*
   "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
@@ -396,28 +427,51 @@
 
 ;; =================== Runtime Memory ===============================================
 
-(deftype CURuntimePtr [^Pointer dptr ^long byte-size master]
+(defn cupointer-memcpy*
+  ([dst src ^long byte-count]
+   (with-check
+     (if (satisfies? CUPointer src)
+       (cudart/cuMemcpy (cu-address* dst) (cu-address* src) byte-count)
+       (cudart/cudaMemcpy (safe (pointer dst)) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault))
+     dst))
+  ([dst src ^long byte-count hstream]
+   (with-check
+     (if (satisfies? CUPointer src)
+       (cudart/cuMemcpyAsync (cu-address* dst) (cu-address* src) byte-count hstream)
+       (cudart/cudaMemcpyAsync (safe (pointer dst)) (safe (pointer src))
+                               byte-count cudart/cudaMemcpyDefault hstream))
+     dst)))
+
+(deftype CURuntimePtr [^Pointer dptr ^LongPointer daddr master]
   Object
   (hashCode [x]
-    (hash-combine (hash dptr) byte-size))
+    (hash dptr))
   (equals [x y]
-    (and (instance? CURuntimePtr y) (= dptr (.dptr ^CURuntimePtr y) 0)))
+    (and (instance? CURuntimePtr y) (= dptr (.-dptr ^CURuntimePtr y) 0)))
   (toString [_]
-    (format "#RuntimePtr[:cuda, 0x%x]" byte-size (address dptr))) ;
+    (format "#RuntimePtr[:cuda, 0x%x, %d bytes]" (get-entry daddr 0) (bytesize dptr)))
   Releaseable
   (release [this]
     (if-not (null? dptr)
       (locking dptr
         (when master
-          (with-check (cudart/cudaFree dptr) true)))
+          (with-check (cudart/cudaFree dptr) (.setNull dptr))
+          (release daddr)))
       true))
   Wrapper
   (extract [_]
-    (address dptr))
+    (get-entry daddr 0))
+  CUPointer
+  (cu-pointer* [_]
+    daddr)
+  (cu-address* [_]
+    (get-entry daddr 0))
+  (device? [_]
+    true)
   PointerCreator
   (pointer* [_]
     dptr)
-  (pointer* [this i]
+  (pointer* [_ i]
     (pointer dptr i))
   TypedPointerCreator
   (byte-pointer [_]
@@ -442,23 +496,33 @@
     (double-pointer dptr))
   Bytes
   (bytesize* [_]
-    byte-size)
+    (bytesize dptr))
   Entries
   (size* [_]
     (element-count dptr))
   (sizeof* [_]
-    (sizeof* dptr))
+    (.sizeof dptr))
   Seqable
   (seq [a]
     (pointer-seq dptr))
-  Mem
+  Parameter
+  (set-parameter* [parameter pp i]
+    (put-entry! pp i daddr))
+  Memcpy
   (memcpy-host* [this src byte-count]
-    (with-check (cudart/cudaMemcpy dptr (pointer src) byte-count cudart/cudaMemcpyDefault) this))
+    (with-check
+      (cudart/cudaMemcpy (extract dptr) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault)
+      this))
   (memcpy-host* [this src byte-count hstream]
-    (with-check (cudart/cudaMemcpyAsync dptr (pointer src) byte-count cudart/cudaMemcpyDefault hstream)
-      this)))
+    (with-check
+      (cudart/cudaMemcpyAsync (extract dptr) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault hstream)
+      this))
+  (memcpy* [this src byte-count]
+    (cupointer-memcpy* this src byte-count))
+  (memcpy* [this src byte-count hstream]
+    (cupointer-memcpy* this src byte-count hstream)))
 
-(defn malloc-device*
+(defn malloc-runtime*
   "Allocates `size` bytes of device memory.
 
   The memory is not cleared. `size` must be greater than `0`.
@@ -468,11 +532,12 @@
   ([^long size]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cudaMalloc p size)
-       (->CURuntimePtr (capacity! p size) size true))))
-  ([^long size constructor]
+       (->CURuntimePtr (capacity! p size) (pointer (address p)) true))))
+  ([^long size pointer-type]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cudaMalloc p size)
-       (->CURuntimePtr (constructor (capacity! p size)) size true)))))
+       (let [tp (pointer-type (capacity! p size))]
+         (->CURuntimePtr tp (pointer (address tp)) true))))))
 
 ;; =================== Pinned Memory ================================================
 
@@ -482,32 +547,41 @@
 (defn unregister-pinned [hp]
   (with-check (cudart/cuMemHostUnregister hp) hp))
 
-(deftype CUPinnedPtr [^Pointer hptr ^long byte-size master release-fn]
+
+(deftype CUPinnedPtr [^Pointer hptr ^LongPointer haddr master release-fn]
   Object
   (hashCode [x]
-    (hash-combine (hash hptr) byte-size))
+    (hash hptr))
   (equals [x y]
-    (and (instance? CUPinnedPtr y) (= (address hptr) (address (.-hptr ^CUPinnedPtr y)))))
+    (and (instance? CUPinnedPtr y) (= (get-entry haddr 0) (get-entry (.-haddr ^CUPinnedPtr y) 0))))
   (toString [_]
-    (format "#PinnedPtr[:cuda, 0x%x]" (address hptr)))
+    "aa"#_(format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
   Releaseable
   (release [_]
     (if-not (null? hptr)
       (locking hptr
         (when master
-          (release-fn hptr)))
+          (release-fn hptr)
+          (release haddr)))
       true))
   Wrapper
   (extract [_]
-    (address hptr))
+    (extract hptr))
+  CUPointer
+  (cu-pointer* [_]
+    haddr)
+  (cu-address* [_]
+    (get-entry haddr 0))
+  (device? [_]
+    false)
   PointerCreator
   (pointer* [_]
     hptr)
-  (pointer* [this i]
+  (pointer* [_ i]
     (pointer hptr i))
   TypedPointerCreator
   (byte-pointer [_]
-    hptr)
+    (byte-pointer hptr))
   (clong-pointer [_]
     (clong-pointer hptr))
   (size-t-pointer [_]
@@ -528,7 +602,7 @@
     (double-pointer hptr))
   Bytes
   (bytesize* [_]
-    byte-size)
+    (bytesize hptr))
   Entries
   (size* [_]
     (element-count hptr))
@@ -559,11 +633,18 @@
     this)
   (put! [this obj offset length]
     (put! hptr obj offset length))
-  Mem
+  Parameter
+  (set-parameter* [parameter pp i]
+    (put-entry! pp i haddr))
+  Memcpy
   (memcpy-host* [this src byte-count]
-    (with-check (cudart/cuMemcpyDtoH hptr (extract src) byte-count) this))
+    (with-check (cudart/cuMemcpyDtoH hptr (cu-address* src) byte-count) this))
   (memcpy-host* [this src byte-count hstream]
-    (with-check (cudart/cuMemcpyDtoHAsync hptr (extract src) byte-count hstream) this)))
+    (with-check (cudart/cuMemcpyDtoHAsync hptr (cu-address* src) byte-count hstream) this))
+  (memcpy* [this src byte-count]
+    (cupointer-memcpy* this src byte-count))
+  (memcpy* [this src byte-count hstream]
+    (cupointer-memcpy* this src byte-count hstream)))
 
 (defn mem-host-alloc*
   "Allocates `size` bytes of page-locked memory, 'pinned' on the host, using raw integer `flags`.
@@ -576,47 +657,61 @@
   ([^long size ^long flags]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cuMemHostAlloc p size flags)
-       (->CUPinnedPtr (capacity! p size) size true free-pinned))))
-  ([^long size ^long flags constructor]
+       (->CUPinnedPtr (capacity! p size) (pointer (address p)) true free-pinned))))
+  ([^long size ^long flags pointer-type]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cuMemHostAlloc p size flags)
-       (->CUPinnedPtr (constructor (capacity! p size)) size true free-pinned)))))
+       (let [tp (pointer-type (capacity! p size))]
+         (->CUPinnedPtr tp (pointer (address tp)) true free-pinned))))))
 
 (defn mem-host-register*
   "Registers previously allocated host `Pointer` and pins it, using raw integer `flags`.
 
    See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
-  [hptr ^long flags]
-  (with-check (cudart/cuMemHostRegister hptr (bytesize hptr) flags)
-    (->CUPinnedPtr hptr (bytesize hptr) true unregister-pinned)))
+  ([hptr ^long flags]
+   (with-check (cudart/cuMemHostRegister hptr (bytesize hptr) flags)
+     (->CUPinnedPtr hptr (pointer (address hptr)) true unregister-pinned)))
+  ([hptr ^long flags pointer-type]
+   (with-check (cudart/cuMemHostRegister hptr (bytesize hptr) flags)
+     (let [tp (pointer-type (capacity! hptr size))]
+       (->CUPinnedPtr tp (pointer (address tp)) true unregister-pinned)))))
 
-(deftype CUMappedPtr [^Pointer hptr ^long byte-size master]
+(deftype CUMappedPtr [^Pointer hptr ^LongPointer haddr master]
   Object
   (hashCode [x]
-    (hash-combine (hash hptr) byte-size))
+    (hash hptr))
   (equals [x y]
-    (and (instance? CUMappedPtr y) (= (address hptr) (address (.-hptr ^CUMappedPtr y)))))
+    (and (instance? CUMappedPtr y) (= (get-entry haddr 0) (get-entry (.-haddr ^CUMappedPtr y) 0))))
   (toString [_]
-    (format "#PinnedPtr[:cuda, 0x%x]" (address hptr)))
+    (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
   Releaseable
   (release [_]
-    (locking hptr
-      (when master
-        (with-check (cudart/cuMemFreeHost hptr)
-          (release hptr))))
-    true)
+    (if-not (null? hptr)
+      (locking hptr
+        (when master
+          (with-check (cudart/cuMemFreeHost hptr)
+            (release hptr)
+            (release haddr))))
+      true))
   Wrapper
   (extract [_]
-    (address hptr))
+    (get-entry haddr 0))
+  CUPointer
+  (cu-pointer* [_]
+    haddr)
+  (cu-address* [_]
+    (get-entry haddr 0))
+  (device? [_]
+    false)
   PointerCreator
   (pointer* [_]
     hptr)
-  (pointer* [this i]
+  (pointer* [_ i]
     (pointer hptr i))
   TypedPointerCreator
   (byte-pointer [_]
-    hptr)
+    (byte-pointer hptr))
   (clong-pointer [_]
     (clong-pointer hptr))
   (size-t-pointer [_]
@@ -637,7 +732,7 @@
     (double-pointer hptr))
   Bytes
   (bytesize* [_]
-    byte-size)
+    (bytesize hptr))
   Entries
   (size* [_]
     (element-count hptr))
@@ -668,16 +763,25 @@
     this)
   (put! [this obj offset length]
     (put! hptr obj offset length))
-  Mem
+  Parameter
+  (set-parameter* [parameter pp i]
+    (put-entry! pp i haddr))
+  Memcpy
   (memcpy-host* [this src byte-count]
-    (if (instance? CUDevicePtr src)
-      (with-check (cudart/cuMemcpy (address hptr) (extract src) byte-count) this)
-      (cpp/memcpy! (pointer src) hptr))
+    (if (and (satisfies? CUPointer src) (device? src))
+      (with-check (cudart/cuMemcpy (get-entry haddr 0) (cu-address* src) byte-count) this)
+      (cpp/memcpy! (safe (pointer src)) (extract hptr)))
     this)
   (memcpy-host* [this src byte-count hstream]
-    (if (instance? CUDevicePtr src)
-      (with-check (cudart/cuMemcpyAsync (address hptr 0) (extract src) byte-count hstream) this)
-      (with-check (cudart/cuMemcpyHtoDAsync (address hptr 0) (pointer src) byte-count hstream) this))))
+    (with-check
+      (if (and (satisfies? CUPointer src) (device? src))
+        (cudart/cuMemcpyAsync (get-entry haddr 0) (cu-address* src) byte-count hstream)
+        (cudart/cuMemcpyHtoDAsync (get-entry haddr 0) (safe (pointer src)) byte-count hstream))
+      this))
+  (memcpy* [this src byte-count]
+    (cupointer-memcpy* this src byte-count))
+  (memcpy* [this src byte-count hstream]
+    (cupointer-memcpy* this src byte-count hstream)))
 
 (defn mem-alloc-host*
   "Allocates `size` bytes of page-locked memory, 'mapped' to the device.
@@ -690,23 +794,38 @@
   ([^long size]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cuMemAllocHost p size)
-       (->CUMappedPtr (capacity! p size) size true))))
-  ([^long size constructor]
+       (->CUMappedPtr (capacity! p size) (pointer (address p)) true))))
+  ([^long size pointer-type]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cuMemAllocHost p size)
-       (->CUMappedPtr (constructor (capacity! p size)) size true)))))
+       (let [tp (pointer-type (capacity! p size))]
+         (->CUMappedPtr tp (pointer (address tp)) true))))))
 
 ;; =============== Host memory  =================================
 
 (extend-type Pointer
-  Mem
+  Memcpy
   (memcpy-host*
-    ([this dptr byte-size]
-     (with-check (cudart/cuMemcpyDtoH (extract this) (extract dptr) byte-size)
-       dptr))
-    ([this dptr byte-size hstream]
-     (with-check (cudart/cuMemcpyDtoHAsync (extract this) (extract dptr) byte-size hstream)
-       dptr))))
+    ([this src byte-count]
+     (with-check
+       (if (satisfies? CUPointer src)
+         (cudart/cuMemcpyDtoH (extract this) (cu-address* src) byte-count)
+         (cudart/cudaMemcpy (extract this) (safe (pointer src)) cudart/cudaMemcpyDefault byte-count))
+       this))
+    ([this src byte-count hstream]
+     (with-check
+       (if (satisfies? CUPointer src)
+         (cudart/cuMemcpyDtoHAsync (extract this) (cu-address* src) byte-count hstream)
+         (cudart/cudaMemcpyAsync (extract this) (safe (pointer src))
+                                 cudart/cudaMemcpyDefault byte-count hstream))
+       this)))
+  (memcpy*
+    ([this src byte-count]
+     (memcpy-host* this src byte-count)
+     this)
+    ([this src byte-count hstream]
+     (memcpy-host* this src byte-count hstream)
+     this)))
 
 ;; ================== Stream Management ======================================
 
