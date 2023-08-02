@@ -27,7 +27,7 @@
                                       [:ptx prog]])
                    m (module (link-complete linked-prog))
                    parent (function m "parentKernel")
-                   data (mem-alloc (* Float/BYTES num-elements))]
+                   data (mem-alloc-runtime (* Float/BYTES num-elements))]
       (facts
        "Dynamic parallelism JCuda example."
        (memcpy-host! (float-pointer num-elements) data)

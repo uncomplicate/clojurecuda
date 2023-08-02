@@ -189,10 +189,10 @@
 
     (facts
      "Runtime cudaMalloc tests."
-     (with-release [cuda1 (mem-alloc-device Float/BYTES :float)
+     (with-release [cuda1 (mem-alloc-runtime Float/BYTES :float)
                     host1 (float-pointer [100.0])
                     host2 (mem-alloc-mapped Float/BYTES :float)
-                    zero (mem-alloc-device 0)]
+                    zero (mem-alloc-runtime 0)]
        zero => truthy
        (bytesize cuda1) => Float/BYTES
        (memcpy-host! host1 cuda1) => cuda1

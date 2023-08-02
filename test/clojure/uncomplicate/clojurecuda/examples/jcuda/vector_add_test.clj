@@ -23,9 +23,9 @@
                    host-a (float-pointer [1 2 3])
                    host-b (float-pointer [2 3 4])
                    host-sum (float-pointer 3)
-                   gpu-a (mem-alloc (* Float/BYTES 3))
-                   gpu-b (mem-alloc (* Float/BYTES 3))
-                   gpu-sum (mem-alloc (* Float/BYTES 3))]
+                   gpu-a (mem-alloc-runtime (* Float/BYTES 3))
+                   gpu-b (mem-alloc-driver (* Float/BYTES 3))
+                   gpu-sum (mem-alloc-pinned (* Float/BYTES 3))]
       (facts
        "Vector add JCuda example."
        (memcpy-host! host-a gpu-a)

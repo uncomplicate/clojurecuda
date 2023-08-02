@@ -33,7 +33,7 @@
                                    (format "-DWGS=%d" wgs)])
                    modl (module prog)
                    data (float-pointer (range cnt))
-                   cu-data (mem-alloc (* cnt Float/BYTES))
+                   cu-data (mem-alloc-runtime (* cnt Float/BYTES))
                    sum-reduction-horizontal (function modl "sum_reduction_horizontal")
                    sum-horizontal (function modl "sum_reduce_horizontal")]
 
@@ -42,7 +42,7 @@
       (let [acc-size (* Double/BYTES (max 1 (count-groups wgs cnt)))]
         (with-release [sum-reduction-kernel (function modl "sum_reduction")
                        sum-reduce-kernel (function modl "sum_reduce")
-                       cu-acc (mem-alloc acc-size)]
+                       cu-acc (mem-alloc-runtime acc-size)]
           (facts
            "Test 1D reduction."
            (launch-reduce! nil sum-reduce-kernel sum-reduction-kernel [cu-acc cu-data] [cu-acc] cnt wgs)
@@ -54,7 +54,7 @@
             res (double-pointer cnt-m)]
         (with-release [sum-reduction-horizontal (function modl "sum_reduction_horizontal")
                        sum-reduce-horizontal (function modl "sum_reduce_horizontal")
-                       cu-acc (mem-alloc acc-size)]
+                       cu-acc (mem-alloc-runtime acc-size)]
           (facts
            "Test horizontal 2D reduction."
            (launch-reduce! nil sum-reduce-horizontal sum-reduction-horizontal
@@ -68,7 +68,7 @@
             res (double-pointer cnt-n)]
         (with-release [sum-reduction-vertical (function modl "sum_reduction_vertical")
                        sum-reduce-vertical (function modl "sum_reduce_vertical")
-                       cu-acc (mem-alloc acc-size)]
+                       cu-acc (mem-alloc-runtime acc-size)]
           (facts
            "Test vertical 2D reduction."
            (launch-reduce! nil sum-reduce-vertical sum-reduction-vertical
