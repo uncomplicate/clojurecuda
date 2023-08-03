@@ -758,13 +758,13 @@
     (put-entry! pp i haddr))
   Memcpy
   (memcpy-host* [this src byte-count]
-    (if (and (satisfies? CUPointer src) (device? src))
+    (if (device? src)
       (with-check (cudart/cuMemcpy (get-entry haddr 0) (cu-address* src) byte-count) this)
       (cpp/memcpy! (safe (pointer src)) (extract hptr)))
     this)
   (memcpy-host* [this src byte-count hstream]
     (with-check
-      (if (and (satisfies? CUPointer src) (device? src))
+      (if (device? src)
         (cudart/cuMemcpyAsync (get-entry haddr 0) (cu-address* src) byte-count hstream)
         (cudart/cuMemcpyHtoDAsync (get-entry haddr 0) (safe (pointer src)) byte-count hstream))
       this))
@@ -806,30 +806,30 @@
   (memcpy-host*
     ([this src byte-count]
      (with-check
-       (if (and (satisfies? CUPointer src) (device? src))
-         (cudart/cuMemcpyDtoH (extract this) (cu-address* src) byte-count)
-         (cudart/cudaMemcpy (extract this) (safe (pointer src)) cudart/cudaMemcpyDefault byte-count))
+       (if (instance? Pointer src)
+         (cudart/cudaMemcpy (extract this) (safe (pointer src)) cudart/cudaMemcpyDefault byte-count)
+         (cudart/cuMemcpyDtoH (extract this) (cu-address* src) byte-count))
        this))
     ([this src byte-count hstream]
      (with-check
-       (if (and (satisfies? CUPointer src) (device? src))
-         (cudart/cuMemcpyDtoHAsync (extract this) (cu-address* src) byte-count hstream)
+       (if (instance? Pointer src)
          (cudart/cudaMemcpyAsync (extract this) (safe (pointer src))
-                                 cudart/cudaMemcpyDefault byte-count hstream))
+                                 cudart/cudaMemcpyDefault byte-count hstream)
+         (cudart/cuMemcpyDtoHAsync (extract this) (cu-address* src) byte-count hstream))
        this)))
   (memcpy*
     ([this src byte-count]
      (with-check
-       (if (satisfies? CUPointer src)
-         (cudart/cuMemcpy (address (extract this)) (cu-address* src) byte-count)
-         (cudart/cudaMemcpy (extract this) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault))
+       (if (instance? Pointer src)
+         (cudart/cudaMemcpy (extract this) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault)
+         (cudart/cuMemcpy (address (extract this)) (cu-address* src) byte-count))
        this))
     ([this src byte-count hstream]
      (with-check
-       (if (satisfies? CUPointer src)
-         (cudart/cuMemcpyAsync (address (extract this)) (cu-address* src) byte-count hstream)
+       (if (instance? Pointer src)
          (cudart/cudaMemcpyAsync (extract this) (safe (pointer src))
-                                 byte-count cudart/cudaMemcpyDefault hstream))
+                                 byte-count cudart/cudaMemcpyDefault hstream)
+         (cudart/cuMemcpyAsync (address (extract this)) (cu-address* src) byte-count hstream))
        this))))
 
 ;; ================== Stream Management ======================================
