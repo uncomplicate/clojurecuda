@@ -32,7 +32,6 @@
            [uncomplicate.clojurecuda.internal.javacpp CUHostFn CUStreamCallback]))
 
 (defprotocol CUPointer
-  (cu-pointer* [this])
   (cu-address* [this])
   (device? [this]))
 
@@ -376,8 +375,6 @@
   (extract [_]
     (extract daddr))
   CUPointer
-  (cu-pointer* [_]
-    daddr)
   (cu-address* [_]
     (get-entry daddr 0))
   (device? [_]
@@ -430,16 +427,16 @@
 (defn cupointer-memcpy*
   ([dst src ^long byte-count]
    (with-check
-     (if (satisfies? CUPointer src)
-       (cudart/cuMemcpy (cu-address* dst) (cu-address* src) byte-count)
-       (cudart/cudaMemcpy (safe (pointer dst)) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault))
+     (if (instance? Pointer src)
+       (cudart/cudaMemcpy (safe (pointer dst)) (extract src) byte-count cudart/cudaMemcpyDefault)
+       (cudart/cuMemcpy (cu-address* dst) (cu-address* src) byte-count))
      dst))
   ([dst src ^long byte-count hstream]
    (with-check
-     (if (satisfies? CUPointer src)
-       (cudart/cuMemcpyAsync (cu-address* dst) (cu-address* src) byte-count hstream)
-       (cudart/cudaMemcpyAsync (safe (pointer dst)) (safe (pointer src))
-                               byte-count cudart/cudaMemcpyDefault hstream))
+     (if (instance? Pointer src)
+       (cudart/cudaMemcpyAsync (safe (pointer dst)) (extract src)
+                               byte-count cudart/cudaMemcpyDefault hstream)
+       (cudart/cuMemcpyAsync (cu-address* dst) (cu-address* src) byte-count hstream))
      dst)))
 
 (deftype CURuntimePtr [^Pointer dptr ^LongPointer daddr master]
@@ -462,8 +459,6 @@
   (extract [_]
     (get-entry daddr 0))
   CUPointer
-  (cu-pointer* [_]
-    daddr)
   (cu-address* [_]
     (get-entry daddr 0))
   (device? [_]
@@ -511,11 +506,11 @@
   Memcpy
   (memcpy-host* [this src byte-count]
     (with-check
-      (cudart/cudaMemcpy (extract dptr) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault)
+      (cudart/cuMemcpyHtoD (get-entry daddr 0) (safe (pointer src)) byte-count)
       this))
   (memcpy-host* [this src byte-count hstream]
     (with-check
-      (cudart/cudaMemcpyAsync (extract dptr) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault hstream)
+      (cudart/cuMemcpyHtoDAsync (get-entry daddr 0) (safe (pointer src)) byte-count hstream)
       this))
   (memcpy* [this src byte-count]
     (cupointer-memcpy* this src byte-count))
@@ -547,7 +542,6 @@
 (defn unregister-pinned [hp]
   (with-check (cudart/cuMemHostUnregister hp) hp))
 
-
 (deftype CUPinnedPtr [^Pointer hptr ^LongPointer haddr master release-fn]
   Object
   (hashCode [x]
@@ -555,7 +549,7 @@
   (equals [x y]
     (and (instance? CUPinnedPtr y) (= (get-entry haddr 0) (get-entry (.-haddr ^CUPinnedPtr y) 0))))
   (toString [_]
-    "aa"#_(format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
+    (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
   Releaseable
   (release [_]
     (if-not (null? hptr)
@@ -568,8 +562,6 @@
   (extract [_]
     (extract hptr))
   CUPointer
-  (cu-pointer* [_]
-    haddr)
   (cu-address* [_]
     (get-entry haddr 0))
   (device? [_]
@@ -698,8 +690,6 @@
   (extract [_]
     (get-entry haddr 0))
   CUPointer
-  (cu-pointer* [_]
-    haddr)
   (cu-address* [_]
     (get-entry haddr 0))
   (device? [_]
@@ -804,28 +794,43 @@
 ;; =============== Host memory  =================================
 
 (extend-type Pointer
+  CUPointer
+  (cu-address* [this]
+    (address this))
+  (device? [_]
+    false)
+  Parameter
+  (set-parameter* [parameter pp i]
+    (put-entry! pp i (pointer (address parameter))))
   Memcpy
   (memcpy-host*
     ([this src byte-count]
      (with-check
-       (if (satisfies? CUPointer src)
+       (if (and (satisfies? CUPointer src) (device? src))
          (cudart/cuMemcpyDtoH (extract this) (cu-address* src) byte-count)
          (cudart/cudaMemcpy (extract this) (safe (pointer src)) cudart/cudaMemcpyDefault byte-count))
        this))
     ([this src byte-count hstream]
      (with-check
-       (if (satisfies? CUPointer src)
+       (if (and (satisfies? CUPointer src) (device? src))
          (cudart/cuMemcpyDtoHAsync (extract this) (cu-address* src) byte-count hstream)
          (cudart/cudaMemcpyAsync (extract this) (safe (pointer src))
                                  cudart/cudaMemcpyDefault byte-count hstream))
        this)))
   (memcpy*
     ([this src byte-count]
-     (memcpy-host* this src byte-count)
-     this)
+     (with-check
+       (if (satisfies? CUPointer src)
+         (cudart/cuMemcpy (address (extract this)) (cu-address* src) byte-count)
+         (cudart/cudaMemcpy (extract this) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault))
+       this))
     ([this src byte-count hstream]
-     (memcpy-host* this src byte-count hstream)
-     this)))
+     (with-check
+       (if (satisfies? CUPointer src)
+         (cudart/cuMemcpyAsync (address (extract this)) (cu-address* src) byte-count hstream)
+         (cudart/cudaMemcpyAsync (extract this) (safe (pointer src))
+                                 byte-count cudart/cudaMemcpyDefault hstream))
+       this))))
 
 ;; ================== Stream Management ======================================
 

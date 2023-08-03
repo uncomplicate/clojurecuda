@@ -19,15 +19,16 @@
             [uncomplicate.clojure-cpp
              :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer size-t-pointer
                      pointer-pointer get-entry put-entry! element-count safe type-pointer
-                     capacity!]]
+                     capacity! address]]
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
              [constants :refer :all]
              [impl :refer :all]
              [utils :refer [with-check]]])
-  (:import [org.bytedeco.javacpp LongPointer SizeTPointer PointerPointer]
+  (:import [org.bytedeco.javacpp Pointer LongPointer SizeTPointer PointerPointer]
            org.bytedeco.cuda.global.cudart
-           [org.bytedeco.cuda.cudart CUctx_st CUlinkState_st CUmod_st CUfunc_st CUstream_st CUevent_st]))
+           [org.bytedeco.cuda.cudart CUctx_st CUlinkState_st CUmod_st CUfunc_st CUstream_st CUevent_st
+            cudaPointerAttributes]))
 
 (defn init
   "Initializes the CUDA driver."
@@ -162,6 +163,52 @@
    (memcpy* dst src byte-count hstream)
    dst))
 
+(defn memcpy-to-host!
+  "Copies `byte-count` or all possible memory from device `src` to host `dst`, one of which
+  has to be accessible from the host. If `hstream` is provided, the copy is asynchronous.
+
+  See [cuMemcpyDtoH](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
+  "
+  ([^Pointer src ^Pointer dst ^long byte-count hstream]
+   (check-size src 0 byte-count)
+   (check-size dst 0 byte-count)
+   (with-check
+     (if hstream
+       (cudart/cuMemcpyDtoHAsync (extract dst) (address (extract src)) byte-count hstream)
+       (cudart/cuMemcpyDtoH (extract dst) (address (extract src)) byte-count))
+     dst))
+  ([src dst count-or-stream]
+   (if (integer? count-or-stream)
+     (memcpy-to-host! src dst count-or-stream nil)
+     (memcpy-to-host! src dst (min (bytesize src) (bytesize dst)) count-or-stream))
+   dst)
+  ([src dst]
+   (memcpy-to-host! src dst (min (bytesize src) (bytesize dst)))
+   dst))
+
+(defn memcpy-to-device!
+  "Copies `byte-count` or all possible memory from host `src` to device `dst`, one of which
+  has to be accessible from the host. If `hstream` is provided, the copy is asynchronous.
+
+  See [cuMemcpyDtoH](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
+  "
+  ([^Pointer src ^Pointer dst ^long byte-count hstream]
+   (check-size src 0 byte-count)
+   (check-size dst 0 byte-count)
+   (with-check
+     (if hstream
+       (cudart/cuMemcpyHtoDAsync (address (extract dst)) (extract src) byte-count hstream)
+       (cudart/cuMemcpyHtoD (address (extract dst)) (extract src) byte-count))
+     dst))
+  ([src dst count-or-stream]
+   (if (integer? count-or-stream)
+     (memcpy-to-device! src dst count-or-stream nil)
+     (memcpy-to-device! src dst (min (bytesize src) (bytesize dst)) count-or-stream))
+   dst)
+  ([src dst]
+   (memcpy-to-device! src dst (min (bytesize src) (bytesize dst)))
+   dst))
+
 (defn memcpy-host!
   "Copies `byte-count` or all possible memory from `src` to `dst`, one of which
   has to be accessible from the host. If `hstream` is provided, the copy is asynchronous.
@@ -178,7 +225,7 @@
    dst)
   ([src dst count-or-stream]
    (if (integer? count-or-stream)
-     (memcpy-host! dst src count-or-stream nil)
+     (memcpy-host! src dst count-or-stream nil)
      (memcpy-host* dst src (min (bytesize src) (bytesize dst)) count-or-stream))
    dst)
   ([src dst]
@@ -250,6 +297,20 @@
      (throw (ex-info (format "Unknown data type: %s." (str type))))))
   ([^long size]
    (malloc-runtime* (max 0 size))))
+
+(defn cuda-malloc
+  ([^long size]
+   (let-release [p (byte-pointer nil)]
+     (with-check (cudart/cudaMalloc p size) (capacity! p size))))
+  ([^long size pointer-type]
+   (if-let [pt (type-pointer pointer-type)]
+     (let-release [p (byte-pointer nil)]
+       (with-check (cudart/cudaMalloc p size) (pt (capacity! p size))))
+     (throw (ex-info (format "Unknown data type: %s." (str type)))))))
+
+(defn cuda-free! [^Pointer dptr]
+  (with-check (cudart/cudaFree (extract dptr)) (.setNull dptr))
+  dptr)
 
 ;; =================== Pinned Memory ================================================
 
