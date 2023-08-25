@@ -324,22 +324,14 @@
   (memset*
     ([this dptr n]
      (if (= (int this) this)
-       (with-check (cudart/cuMemsetD32 dptr (int this) n) dptr)
+       (with-check (cudart/cuMemsetD32 dptr (int this) (* 2 (long n))) dptr)
        (dragan-says-ex "This long value is too big for the memset! function."
                        {:value this :max (int this)})))
     ([this dptr n hstream]
      (if (= (int this) this)
-       (with-check (cudart/cuMemsetD32Async dptr (int this) n hstream) dptr)
+       (with-check (cudart/cuMemsetD32Async dptr (int this) (* 2 (long n)) hstream) dptr)
        (dragan-says-ex "This long value is too big for the memset! function."
                        {:value this :max (int this)})))))
-
-(extend-type Double
-  MemSet
-  (memset*
-    ([this dptr n]
-     (memset* dptr (Double/doubleToLongBits this) n))
-    ([this dptr n hstream]
-     (memset* dptr (Double/doubleToLongBits this) n hstream))))
 
 (defprotocol Memcpy
   "An object that represents memory that participates in CUDA operations.

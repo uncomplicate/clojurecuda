@@ -228,7 +228,7 @@
        (seq mapped-host2) => [14.0]))
 
     (facts
-     "CUDA Runtime Pointer tests."
+     "CUDA Raw Runtime Pointer tests."
      (with-release [host1 (float-pointer [1 2 3 4])
                     cuda1 (cuda-malloc (* 4 Float/BYTES) :float)
                     cuda2 (cuda-malloc (* 3 Float/BYTES) :float)
@@ -238,7 +238,10 @@
        (memcpy! (ptr cuda1 2) (ptr cuda2 1))
        (synchronize!)
        (pointer-seq (memcpy-to-host! cuda1 host2)) => [1.0 2.0 3.0 4.0]
-       (pointer-seq (memcpy-to-host! cuda2 host3)) => [0.0 3.0 4.0]))
+       (pointer-seq (memcpy-to-host! cuda2 host3)) => [0.0 3.0 4.0]
+       (cuda-free! cuda1) => cuda1
+       (cuda-free! cuda1) => cuda1
+       (cuda-free! cuda2) => cuda2))
 
     (facts
      "memset tests."
@@ -248,7 +251,7 @@
        (put-int! (pointer pinned-host) 1 34)
        (memcpy-host! pinned-host cuda1) => cuda1
        (pointer-seq (memcpy-host! cuda1 (int-pointer 2))) => [24 34]
-       (memcpy-host! (memset! cuda1 0 1) pinned-host) => pinned-host
+       (memcpy-host! (memset! cuda1 (int 0) 1) pinned-host) => pinned-host
        (pointer-seq (int-pointer pinned-host)) => [0 34]
        (memcpy-host! (memset! cuda1 (int 0)) pinned-host) => pinned-host
        (synchronize!)
