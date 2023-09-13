@@ -8,8 +8,8 @@
 
 (ns uncomplicate.clojurecuda.examples.jcuda.vector-add-test
   (:require [midje.sweet :refer :all]
-            [uncomplicate.commons.core :refer [release with-release]]
-            [uncomplicate.clojure-cpp :refer [float-pointer pointer-seq element-count]]
+            [uncomplicate.commons.core :refer [release with-release size]]
+            [uncomplicate.clojure-cpp :refer [float-pointer pointer-seq]]
             [uncomplicate.clojurecuda.core :refer :all])
   (:import clojure.lang.ExceptionInfo))
 
@@ -30,6 +30,6 @@
        "Vector add JCuda example."
        (memcpy-host! host-a gpu-a)
        (memcpy-host! host-b gpu-b)
-       (launch! add (grid-1d (element-count host-sum)) (parameters (element-count host-sum) gpu-a gpu-b gpu-sum))
+       (launch! add (grid-1d (size host-sum)) (parameters (size host-sum) gpu-a gpu-b gpu-sum))
        (synchronize!)
        (pointer-seq (memcpy-host! gpu-sum host-sum)) => (seq [3.0 5.0 7.0])))))

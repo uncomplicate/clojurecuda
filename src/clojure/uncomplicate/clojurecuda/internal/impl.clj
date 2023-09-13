@@ -125,9 +125,9 @@
        options))
 
 (defn check-options [^IntPointer options ^Pointer option-values]
-  (when-not (= (element-count options) (element-count option-values))
+  (when-not (= (size options) (size option-values))
     (throw (ex-info "Inconsistent number of options provided."
-                    {:requested (element-count options) :provided (element-count option-values)}))))
+                    {:requested (size options) :provided (size option-values)}))))
 
 (defn link-add-data* [^CUlinkState_st link-state type ^Pointer data ^String name
                       ^IntPointer options ^Pointer option-values]
@@ -136,7 +136,7 @@
                                       {:type type :available jit-input-types}))))]
     (check-options options option-values)
     (with-check (cudart/cuLinkAddData link-state type data (bytesize data) name
-                                      (element-count options) options option-values)
+                                      (size options) options option-values)
       {:data data} link-state)))
 
 (defn link-add-file* [^CUlinkState_st link-state type ^String file-name
@@ -146,7 +146,7 @@
                                       {:type type :available jit-input-types}))))]
     (check-options options option-values)
     (with-check (cudart/cuLinkAddFile link-state type file-name
-                                      (element-count options) options option-values)
+                                      (size options) options option-values)
       {:file file-name} link-state)))
 
 (defn link*
@@ -224,7 +224,7 @@
   (let-release [res (_nvrtcProgram.)]
     (with-check-nvrtc
       (nvrtc/nvrtcCreateProgram res source-code name
-                                (element-count source-headers) source-headers include-names)
+                                (size source-headers) source-headers include-names)
       res)))
 
 (defn program-log*
@@ -238,7 +238,7 @@
 (defn compile*
   "Compiles the given `program` using an array of string `options`."
   ([^_nvrtcProgram program ^PointerPointer options]
-   (let [err (nvrtc/nvrtcCompileProgram program (element-count options) options)]
+   (let [err (nvrtc/nvrtcCompileProgram program (size options) options)]
      (if (= 0 err)
        program
        (throw (nvrtc-error err (program-log* program)))))))
@@ -357,8 +357,8 @@
     (format "#DevicePtr[:cuda, 0x%x, %d bytes]" (get-entry daddr 0) byte-size))
   Releaseable
   (release [this]
-    (if-not (null? daddr)
-      (locking daddr
+    (locking daddr
+      (if-not (null? daddr)
         (when master
           (with-check (cudart/cuMemFree (get-entry daddr 0)) true)
           (release daddr)))
@@ -441,8 +441,8 @@
     (format "#RuntimePtr[:cuda, 0x%x, %d bytes]" (get-entry daddr 0) (bytesize dptr)))
   Releaseable
   (release [this]
-    (if-not (null? dptr)
-      (locking dptr
+    (locking dptr
+      (if-not (null? dptr)
         (when master
           (with-check (cudart/cudaFree dptr) (.setNull dptr))
           (release daddr)))
@@ -486,7 +486,7 @@
     (bytesize dptr))
   Entries
   (size* [_]
-    (element-count dptr))
+    (size* dptr))
   (sizeof* [_]
     (.sizeof dptr))
   Seqable
@@ -544,8 +544,8 @@
     (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
   Releaseable
   (release [_]
-    (if-not (null? hptr)
-      (locking hptr
+    (locking hptr
+      (if-not (null? hptr)
         (when master
           (release-fn hptr)
           (release haddr)))
@@ -589,7 +589,7 @@
     (bytesize hptr))
   Entries
   (size* [_]
-    (element-count hptr))
+    (size* hptr))
   (sizeof* [_]
     (.sizeof hptr))
   Seqable
@@ -671,8 +671,8 @@
     (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
   Releaseable
   (release [_]
-    (if-not (null? hptr)
-      (locking hptr
+    (locking hptr
+      (if-not (null? hptr)
         (when master
           (with-check (cudart/cuMemFreeHost hptr)
             (release hptr)
@@ -717,7 +717,7 @@
     (bytesize hptr))
   Entries
   (size* [_]
-    (element-count hptr))
+    (size* hptr))
   (sizeof* [_]
     (.sizeof hptr))
   Seqable

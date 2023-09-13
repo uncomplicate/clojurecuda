@@ -14,11 +14,11 @@
   Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
   "
   (:require [uncomplicate.commons
-             [core :refer [with-release let-release info wrap extract bytesize sizeof]]
+             [core :refer [with-release let-release info wrap extract bytesize sizeof size]]
              [utils :refer [mask count-groups dragan-says-ex]]]
             [uncomplicate.clojure-cpp
              :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer size-t-pointer
-                     pointer-pointer get-entry put-entry! element-count safe type-pointer
+                     pointer-pointer get-entry put-entry! safe type-pointer
                      capacity! address]]
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
@@ -476,9 +476,9 @@
 (defn set-parameter!
   "Sets the `i`th parameter in a parameter array `arr`"
   [^PointerPointer pp ^long i parameter]
-  (if (< -1 i (element-count pp))
+  (if (< -1 i (size pp))
     (set-parameter* parameter (extract pp) i)
-    (throw (ex-info "Index out of bounds." {:requested i :available (element-count pp)})))
+    (throw (ex-info "Index out of bounds." {:requested i :available (size pp)})))
   pp)
 
 (defn set-parameters!
