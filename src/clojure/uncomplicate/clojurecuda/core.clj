@@ -18,7 +18,7 @@
              [utils :refer [mask count-groups dragan-says-ex]]]
             [uncomplicate.clojure-cpp
              :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer size-t-pointer
-                     pointer-pointer get-entry put-entry! safe type-pointer
+                     pointer-pointer get-entry put-entry! safe type-pointer position!
                      capacity! address]]
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
@@ -309,7 +309,8 @@
      (throw (ex-info (format "Unknown data type: %s." (str type)))))))
 
 (defn cuda-free! [^Pointer dptr]
-  (with-check (cudart/cudaFree (extract dptr)) (.setNull dptr))
+  (when-not (null? dptr)
+    (with-check (cudart/cudaFree (position! dptr 0)) (.setNull dptr)))
   dptr)
 
 ;; =================== Pinned Memory ================================================
