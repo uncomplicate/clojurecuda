@@ -358,10 +358,10 @@
   Releaseable
   (release [this]
     (locking daddr
-      (if-not (null? daddr)
+      (when-not (null? daddr)
         (when master
-          (with-check (cudart/cuMemFree (get-entry daddr 0)) true)
-          (release daddr)))
+          (with-check (cudart/cuMemFree (get-entry daddr 0)) true))
+        (release daddr))
       true))
   Wrapper
   (extract [_]
@@ -442,10 +442,10 @@
   Releaseable
   (release [this]
     (locking dptr
-      (if-not (null? dptr)
+      (when-not (null? dptr)
         (when master
-          (with-check (cudart/cudaFree dptr) (.setNull dptr))
-          (release daddr)))
+          (with-check (cudart/cudaFree dptr) (.setNull dptr)))
+        (release daddr))
       true))
   Wrapper
   (extract [_]
@@ -545,10 +545,10 @@
   Releaseable
   (release [_]
     (locking hptr
-      (if-not (null? hptr)
+      (when-not (null? hptr)
         (when master
-          (release-fn hptr)
-          (release haddr)))
+          (release-fn hptr))
+        (release haddr))
       true))
   Wrapper
   (extract [_]
@@ -672,11 +672,11 @@
   Releaseable
   (release [_]
     (locking hptr
-      (if-not (null? hptr)
+      (when-not (null? hptr)
         (when master
           (with-check (cudart/cuMemFreeHost hptr)
-            (release hptr)
-            (release haddr))))
+            (release hptr))
+          (release haddr)))
       true))
   Wrapper
   (extract [_]

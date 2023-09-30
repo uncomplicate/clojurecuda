@@ -12,7 +12,7 @@
             [uncomplicate.commons.core :refer [release with-release size bytesize extract let-release]]
             [uncomplicate.clojure-cpp :as cpp
              :refer [pointer float-pointer byte-pointer get-entry get-float put-float! int-pointer
-                     long-pointer put-int! pointer-seq put-entry! fill! ptr]]
+                     long-pointer put-int! pointer-seq put-entry! fill! ptr position]]
             [uncomplicate.clojurecuda
              [core :refer :all]
              [info :as info :refer [pci-bus-id-string]]]
@@ -242,6 +242,19 @@
        (cuda-free! cuda1) => cuda1
        (cuda-free! cuda1) => cuda1
        (cuda-free! cuda2) => cuda2))
+
+    (facts
+     "CUDA Raw Runtime Pointer arithmetic tests."
+     (with-release [host1 (float-pointer [1 2 3 4])
+                    cuda1 (cuda-malloc (* 4 Float/BYTES) :float)]
+       (memcpy-to-device! host1 cuda1) => cuda1
+       (pointer cuda1) => cuda1
+       (pointer cuda1 0) => cuda1
+       (size (pointer cuda1 1)) => (dec (size cuda1))
+       (bytesize (pointer cuda1 1)) => (- (bytesize cuda1) Float/BYTES)
+       (size (ptr cuda1 1)) => (dec (size cuda1))
+       (bytesize (ptr cuda1 1)) => (- (bytesize cuda1) Float/BYTES)
+       (cuda-free! cuda1) => cuda1))
 
     (facts
      "memset tests."

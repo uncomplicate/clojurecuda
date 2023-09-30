@@ -275,71 +275,72 @@
 
   See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
-  ([^long size flag]
-   (mem-alloc-managed* size (or (mem-attach-flags flag)
-                                (throw (ex-info "Unknown mem-attach flag."
-                                                {:flag flag :available mem-attach-flags})))))
-  ([^long size]
-   (mem-alloc-managed* size cudart/CU_MEM_ATTACH_GLOBAL)))
+  ([^long bytesize flag]
+   (mem-alloc-managed* bytesize (or (mem-attach-flags flag)
+                                    (throw (ex-info "Unknown mem-attach flag."
+                                                    {:flag flag :available mem-attach-flags})))))
+  ([^long bytesize]
+   (mem-alloc-managed* bytesize cudart/CU_MEM_ATTACH_GLOBAL)))
 
 ;; =================== Runtime API Memory ================================================
 
 (defn mem-alloc-runtime
-  "Allocates the `size` bytes of memory on the device.
+  "Allocates the `bytesize` bytes of memory on the device.
 
-  The old memory content is not cleared. `size` must be greater than `0`.
+  The old memory content is not cleared. `bytesize` must be greater than `0`.
 
   See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
-  ([^long size type]
+  ([^long bytesize type] ;;TODO functions that receive type should accept size instead of bytesize
    (if-let [t (type-pointer type)]
-     (malloc-runtime* (max 0 size) t)
+     (malloc-runtime* (max 0 bytesize) t)
      (throw (ex-info (format "Unknown data type: %s." (str type))))))
-  ([^long size]
-   (malloc-runtime* (max 0 size))))
+  ([^long bytesize]
+   (malloc-runtime* (max 0 bytesize))))
 
 (defn cuda-malloc
-  ([^long size]
+  ([^long bytesize]
    (let-release [p (byte-pointer nil)]
-     (with-check (cudart/cudaMalloc p size) (capacity! p size))))
-  ([^long size pointer-type]
+     (with-check (cudart/cudaMalloc p bytesize) (capacity! p bytesize))))
+  ([^long bytesize pointer-type]
    (if-let [pt (type-pointer pointer-type)]
      (let-release [p (byte-pointer nil)]
-       (with-check (cudart/cudaMalloc p size) (pt (capacity! p size))))
+       (with-check (cudart/cudaMalloc p bytesize) (pt (capacity! p bytesize))))
      (throw (ex-info (format "Unknown data type: %s." (str type)))))))
 
 (defn cuda-free! [^Pointer dptr]
   (when-not (null? dptr)
-    (with-check (cudart/cudaFree (position! dptr 0)) (.setNull dptr)))
+    (with-check (cudart/cudaFree (position! dptr 0))
+      (do (.deallocate dptr) (.setNull dptr))))
   dptr)
 
 ;; =================== Pinned Memory ================================================
 
 (defn mem-alloc-pinned
-  "Allocates `size` bytes of page-locked memory, 'pinned' on the host, using keyword `flags`.
+  "Allocates `bytesize` bytes of page-locked memory, 'pinned' on the host, using keyword `flags`.
   For available flags, see [constants/mem-host-alloc-flags]
 
   Valid flags are: `:portable`, `:devicemap` and `:writecombined`. The default is none.
-  The memory is not cleared. `size` must be greater than `0`.
+  The memory is not cleared. `bytesize` must be greater than `0`.
 
   Pinned memory is optimized for the `memcpy-host!` operation, while 'mapped' memory is optimized for `memcpy!`.
 
   See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
-  ([^long size]
-   (mem-host-alloc* (max 0 size) 0))
-  ([^long size flags]
+  ([^long bytesize]
+   (mem-host-alloc* (max 0 bytesize) 0))
+  ([^long bytesize flags]
    (if-let [t (type-pointer flags)]
-     (mem-host-alloc* (max 0 size) 0 t)
-     (mem-host-alloc* (max 0 size)
+     (mem-host-alloc* (max 0 bytesize) 0 t)
+     (mem-host-alloc* (max 0 bytesize)
                       (if (keyword? flags)
                         (or (mem-host-alloc-flags flags)
                             (throw (ex-info "Unknown mem-host-alloc flag."
                                             {:flag flags :available mem-host-alloc-flags})))
                         (mask mem-host-alloc-flags flags)))))
-  ([^long size type flags]
+  ([^long bytesize type flags]
    (if-let [t (type-pointer type)]
-     (mem-host-alloc* (max 0 size)
+     (mem-host-alloc* (max 0 bytesize)
                       (if (keyword? flags)
                         (or (mem-host-alloc-flags flags)
                             (throw (ex-info "Unknown mem-host-alloc flag."
