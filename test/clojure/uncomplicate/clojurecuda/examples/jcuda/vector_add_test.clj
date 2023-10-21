@@ -7,11 +7,13 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns uncomplicate.clojurecuda.examples.jcuda.vector-add-test
-  (:require [midje.sweet :refer :all]
-            [uncomplicate.commons.core :refer [release with-release size]]
+  (:require [midje.sweet :refer [facts =>]]
+            [uncomplicate.commons.core :refer [with-release size]]
             [uncomplicate.clojure-cpp :refer [float-pointer pointer-seq]]
-            [uncomplicate.clojurecuda.core :refer :all])
-  (:import clojure.lang.ExceptionInfo))
+            [uncomplicate.clojurecuda.core
+             :refer [compile! context device function grid-1d init launch! mem-alloc-driver
+                     mem-alloc-pinned mem-alloc-runtime memcpy-host! module parameters program
+                     synchronize! with-context]]))
 
 (init)
 

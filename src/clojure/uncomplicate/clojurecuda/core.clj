@@ -17,18 +17,22 @@
              [core :refer [with-release let-release info wrap extract bytesize sizeof size]]
              [utils :refer [mask count-groups dragan-says-ex]]]
             [uncomplicate.clojure-cpp
-             :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer size-t-pointer
-                     pointer-pointer get-entry put-entry! safe type-pointer position!
+             :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer
+                     size-t-pointer pointer-pointer get-entry put-entry! safe type-pointer position!
                      capacity! address]]
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
-             [constants :refer :all]
-             [impl :refer :all]
+             [constants :refer [ctx-flags event-flags mem-attach-flags mem-host-alloc-flags
+                                mem-host-register-flags p2p-attributes stream-flags]]
+             [impl :refer [->CUDevice ->CUDevicePtr add-host-fn* attach-mem* can-access-peer*
+                           compile* context* cu-address* current-context* event* host-fn* link*
+                           malloc-runtime* mem-alloc-host* mem-alloc-managed* mem-host-alloc*
+                           mem-host-register* memcpy* memcpy-host* memset* module-load* offset
+                           p2p-attribute* program* program-log* ptx* ready* set-parameter* stream*]]
              [utils :refer [with-check]]])
   (:import [org.bytedeco.javacpp Pointer LongPointer SizeTPointer PointerPointer]
            org.bytedeco.cuda.global.cudart
-           [org.bytedeco.cuda.cudart CUctx_st CUlinkState_st CUmod_st CUfunc_st CUstream_st CUevent_st
-            cudaPointerAttributes]))
+           [org.bytedeco.cuda.cudart CUctx_st CUlinkState_st CUmod_st CUfunc_st CUstream_st CUevent_st]))
 
 (defn init
   "Initializes the CUDA driver."
@@ -138,7 +142,7 @@
 ;; ================== Memory Management  ==============================================
 
 (defn check-size [ptr ^long offset ^long byte-count]
-  (when-not (and (<= 0 offset (+ offset byte-count) (bytesize ptr)))
+  (when-not (<= 0 offset (+ offset byte-count) (bytesize ptr))
     (dragan-says-ex "Requested bytes are out of the bounds of this device pointer."
                     {:offset offset :requested byte-count :available (bytesize ptr)})))
 
@@ -294,7 +298,7 @@
   ([^long bytesize type] ;;TODO functions that receive type should accept size instead of bytesize
    (if-let [t (type-pointer type)]
      (malloc-runtime* (max 0 bytesize) t)
-     (throw (ex-info (format "Unknown data type: %s." (str type))))))
+     (throw (ex-info (format "Unknown data type: %s." (str type)) {}))))
   ([^long bytesize]
    (malloc-runtime* (max 0 bytesize))))
 
@@ -306,7 +310,7 @@
    (if-let [pt (type-pointer pointer-type)]
      (let-release [p (byte-pointer nil)]
        (with-check (cudart/cudaMalloc p bytesize) (pt (capacity! p bytesize))))
-     (throw (ex-info (format "Unknown data type: %s." (str type)))))))
+     (throw (ex-info (format "Unknown data type: %s." (str type)) {})))))
 
 (defn cuda-free! [^Pointer dptr]
   (when-not (null? dptr)
@@ -347,7 +351,7 @@
                                             {:flag flags :available mem-host-alloc-flags})))
                         (mask mem-host-alloc-flags flags))
                       t)
-     (throw (ex-info (format "Unknown data type: %s." (str type)))))))
+     (throw (ex-info (format "Unknown data type: %s." (str type)) {})))))
 
 (defn mem-register-pinned
   "Registers previously allocated Java `memory` structure and pins it, using keyword `flags`.
@@ -419,9 +423,7 @@
   ([]
    (CUmod_st.))
   ([data]
-   (load! (module) data))
-  ([data options]
-   (load! (module) data options)))
+   (load! (module) data)))
 
 (defrecord GridDim [^long grid-x ^long grid-y ^long grid-z ^long block-x ^long block-y ^long block-z])
 
@@ -687,7 +689,7 @@
   "
   [dev peer attribute]
   (p2p-attribute* (extract dev) (extract peer) (or (p2p-attributes attribute)
-                               (throw (ex-info "Unknown p2p attribute"
+                               (throw (ex-info "Unknown p2p attribute."
                                                {:attribute attribute :available p2p-attributes})))))
 
 (defn disable-peer-access!

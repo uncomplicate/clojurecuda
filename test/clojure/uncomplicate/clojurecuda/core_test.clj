@@ -7,12 +7,12 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns uncomplicate.clojurecuda.core-test
-  (:require [midje.sweet :refer :all]
+  (:require [midje.sweet :refer [facts => throws truthy]]
             [clojure.core.async :refer [chan <!!]]
-            [uncomplicate.commons.core :refer [release with-release size bytesize extract let-release]]
+            [uncomplicate.commons.core :refer [release with-release size bytesize let-release]]
             [uncomplicate.clojure-cpp :as cpp
              :refer [pointer float-pointer byte-pointer get-entry get-float put-float! int-pointer
-                     long-pointer put-int! pointer-seq put-entry! fill! ptr position]]
+                     long-pointer put-int! pointer-seq put-entry! fill! ptr]]
             [uncomplicate.clojurecuda
              [core :refer :all]
              [info :as info :refer [pci-bus-id-string]]]
@@ -373,22 +373,22 @@
 
 (facts
  "Runtime API Pointer kernel launch test"
- (let [dev (device 0)]
-   (let [program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cu")
-         ^:const vctr-len 3]
-     (with-release [host-a (float-pointer [1 2 3])
-                    host-b (float-pointer [2 3 4])
-                    host-sum (float-pointer vctr-len)
-                    ctx (context dev)]
-       (in-context ctx
-                   (with-release [prog (compile! (program program-source))
-                                  m (module prog)
-                                  vector-add (function m "add")
-                                  gpu-a (mem-alloc-runtime (* Float/BYTES vctr-len))
-                                  gpu-a-sum (mem-alloc-runtime (* Float/BYTES vctr-len))
-                                  gpu-b (mem-alloc-runtime (* Float/BYTES vctr-len))]
-                     (memcpy-host! host-a gpu-a) => gpu-a
-                     (memcpy-host! host-b gpu-b) => gpu-b
-                     (launch! vector-add (grid-1d vctr-len) (parameters vctr-len gpu-a gpu-b gpu-a-sum))
-                     (synchronize!)
-                     (pointer-seq (memcpy! gpu-a-sum host-sum)) => (seq [3.0 5.0 7.0])))))))
+ (let [dev (device 0)
+       program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cu")
+       ^:const vctr-len 3]
+   (with-release [host-a (float-pointer [1 2 3])
+                  host-b (float-pointer [2 3 4])
+                  host-sum (float-pointer vctr-len)
+                  ctx (context dev)]
+     (in-context ctx
+                 (with-release [prog (compile! (program program-source))
+                                m (module prog)
+                                vector-add (function m "add")
+                                gpu-a (mem-alloc-runtime (* Float/BYTES vctr-len))
+                                gpu-a-sum (mem-alloc-runtime (* Float/BYTES vctr-len))
+                                gpu-b (mem-alloc-runtime (* Float/BYTES vctr-len))]
+                   (memcpy-host! host-a gpu-a) => gpu-a
+                   (memcpy-host! host-b gpu-b) => gpu-b
+                   (launch! vector-add (grid-1d vctr-len) (parameters vctr-len gpu-a gpu-b gpu-a-sum))
+                   (synchronize!)
+                   (pointer-seq (memcpy! gpu-a-sum host-sum)) => (seq [3.0 5.0 7.0]))))))

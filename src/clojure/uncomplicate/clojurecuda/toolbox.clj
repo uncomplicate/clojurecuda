@@ -16,7 +16,8 @@
              [utils :refer [count-groups]]]
             [uncomplicate.clojure-cpp
              :refer [byte-pointer get-long get-int get-double get-float]]
-            [uncomplicate.clojurecuda.core :refer :all])
+            [uncomplicate.clojurecuda.core :refer [grid-1d grid-2d launch! memcpy-host! parameters
+                                                   set-parameter! set-parameters!]])
   (:import org.bytedeco.javacpp.PointerPointer))
 
 (defn launch-reduce!

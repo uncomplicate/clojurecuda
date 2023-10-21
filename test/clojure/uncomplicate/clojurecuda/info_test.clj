@@ -7,11 +7,11 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns uncomplicate.clojurecuda.info-test
-  (:require [midje.sweet :refer :all]
-            [uncomplicate.commons.core :refer [release with-release info]]
+  (:require [midje.sweet :refer [facts =>]]
+            [uncomplicate.commons.core :refer [with-release info]]
             [uncomplicate.clojurecuda
-             [core :refer :all]
-             [info :refer :all]]
+             [core :refer [compile! context device function init module program stream with-context]]
+             [info :refer [driver-version limit limit! stream-flag]]]
             [uncomplicate.clojurecuda.internal.constants :refer [stream-flags]]))
 
 (init)

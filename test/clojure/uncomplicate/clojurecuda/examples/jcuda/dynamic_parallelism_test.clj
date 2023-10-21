@@ -7,12 +7,13 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns uncomplicate.clojurecuda.examples.jcuda.dynamic-parallelism-test
-  (:require [midje.sweet :refer :all]
-            [clojure.java.io :as io]
-            [uncomplicate.commons.core :refer [release with-release]]
+  (:require [midje.sweet :refer [facts =>]]
+            [clojure.java.io :refer [file]]
+            [uncomplicate.commons.core :refer [with-release]]
             [uncomplicate.clojure-cpp :refer [float-pointer pointer-seq]]
-            [uncomplicate.clojurecuda.core :refer :all])
-  (:import clojure.lang.ExceptionInfo))
+            [uncomplicate.clojurecuda.core
+             :refer [compile! context device function grid-1d init launch! link link-complete
+                     mem-alloc-runtime memcpy-host! module parameters program with-context]]))
 
 (init)
 
@@ -23,7 +24,7 @@
   (with-context (context (device))
     (with-release [prog (compile! (program program-source)
                                   ["--relocatable-device-code=true" "-default-device"])
-                   linked-prog (link [[:library (io/file "/opt/cuda/lib64/libcudadevrt.a")]
+                   linked-prog (link [[:library (file "/opt/cuda/lib64/libcudadevrt.a")]
                                       [:ptx prog]])
                    m (module (link-complete linked-prog))
                    parent (function m "parentKernel")

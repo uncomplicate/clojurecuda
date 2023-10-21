@@ -7,8 +7,8 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns uncomplicate.clojurecuda.utils-test
-  (:require [midje.sweet :refer :all]
-            [uncomplicate.clojurecuda.internal.utils :refer :all]))
+  (:require [midje.sweet :refer [facts => throws]]
+            [uncomplicate.clojurecuda.internal.utils :refer [error maybe with-check]]))
 
 (facts
  "error tests"

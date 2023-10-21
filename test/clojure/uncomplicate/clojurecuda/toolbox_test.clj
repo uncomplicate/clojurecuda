@@ -9,13 +9,14 @@
 (ns uncomplicate.clojurecuda.toolbox-test
   (:require [midje.sweet :refer [facts => roughly]]
             [uncomplicate.commons
-             [core :refer [release with-release]]
-             [utils :refer [put-float count-groups]]]
+             [core :refer [with-release]]
+             [utils :refer [count-groups]]]
             [uncomplicate.clojure-cpp :refer [float-pointer double-pointer pointer-seq]]
             [uncomplicate.clojurecuda
-             [core :refer :all]
-             [info :refer :all]
-             [toolbox :refer :all]]))
+             [core :refer [compile! context device function init mem-alloc-runtime memcpy-host!
+                           module program with-context]]
+             [info :refer [max-block-dim-x]]
+             [toolbox :refer [launch-reduce! read-double]]]))
 
 (init)
 

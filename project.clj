@@ -32,7 +32,8 @@
                        uncomplicate.clojurecuda.internal.utils]}
 
   :profiles {:dev {:plugins [[lein-midje "3.2.1"]
-                             [lein-codox "0.10.7"]]
+                             [lein-codox "0.10.8"]
+                             [com.github.clj-kondo/lein-clj-kondo "0.2.5"]]
                    :global-vars {*warn-on-reflection* true
                                  *assert* true
                                  *unchecked-math* :warn-on-boxed

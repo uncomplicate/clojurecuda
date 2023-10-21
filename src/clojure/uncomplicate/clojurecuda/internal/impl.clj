@@ -9,26 +9,26 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.internal.impl
   (:require [uncomplicate.commons
-             [core :refer [with-release let-release Releaseable release Info info Wrapper Wrappable
-                           wrap extract wrap-float wrap-double wrap-long wrap-int wrap-short wrap-byte
-                           Bytes bytesize* bytesize Entries size* sizeof* size]]
+             [core :refer [with-release let-release Releaseable release info Wrapper
+                           extract Bytes bytesize Entries size* size]]
              [utils :as cu :refer [dragan-says-ex]]]
-            [uncomplicate.clojure-cpp :as cpp :refer :all]
+            [uncomplicate.clojure-cpp :as cpp
+             :refer [put-entry! pointer safe int-pointer pointer-pointer byte-pointer size-t-pointer
+                     get-entry get-string null? long-pointer PointerCreator TypedPointerCreator
+                     clong-pointer short-pointer char-pointer double-pointer float-pointer pointer-seq
+                     capacity! address Accessor get! put! get-keyword]]
             [uncomplicate.clojurecuda.internal
-             [constants :refer :all]
-             [utils :refer [with-check error]]]
+             [constants :refer [cu-result-codes jit-input-types jit-options nvrtc-result-codes]]
+             [utils :refer [with-check]]]
             [clojure.core.async :refer [go >!]])
-  (:import java.util.Arrays
-           java.nio.file.Path
+  (:import java.nio.file.Path
            java.io.File
-           java.nio.Buffer
            [clojure.lang IFn AFn Seqable]
-           [java.nio ByteBuffer ByteOrder]
-           [org.bytedeco.javacpp Pointer BytePointer PointerPointer LongPointer SizeTPointer IntPointer]
+           [org.bytedeco.javacpp Pointer BytePointer PointerPointer LongPointer IntPointer]
            [org.bytedeco.cuda.global cudart nvrtc]
-           [org.bytedeco.cuda.cudart CUctx_st CUstream_st CUevent_st CUmod_st CUlinkState_st CUhostFn]
+           [org.bytedeco.cuda.cudart CUctx_st CUstream_st CUevent_st CUmod_st CUlinkState_st]
            org.bytedeco.cuda.nvrtc._nvrtcProgram
-           [uncomplicate.clojure_cpp.pointer StringPointer KeywordPointer]
+           [uncomplicate.clojure_cpp StringPointer KeywordPointer]
            [uncomplicate.clojurecuda.internal.javacpp CUHostFn CUStreamCallback]))
 
 (defprotocol CUPointer
@@ -47,9 +47,9 @@
 
 (deftype CUDevice [^int dev]
   Object
-  (hashCode [x]
+  (hashCode [_]
     dev)
-  (equals [x y]
+  (equals [_ y]
     (and (instance? CUDevice y) (= dev (.dev ^CUDevice y))))
   (toString [_]
     (format "#Device[:cuda, %d]" dev))
@@ -349,14 +349,14 @@
 
 (deftype CUDevicePtr [^LongPointer daddr ^long byte-size master]
   Object
-  (hashCode [x]
+  (hashCode [_]
     (hash-combine (hash daddr) byte-size))
-  (equals [x y]
+  (equals [_ y]
     (and (instance? CUDevicePtr y) (= (get-entry daddr 0) (get-entry (.-daddr ^CUDevicePtr y) 0))))
   (toString [_]
     (format "#DevicePtr[:cuda, 0x%x, %d bytes]" (get-entry daddr 0) byte-size))
   Releaseable
-  (release [this]
+  (release [_]
     (locking daddr
       (when-not (null? daddr)
         (when master
@@ -380,7 +380,7 @@
   (sizeof* [_]
     Byte/BYTES)
   Parameter
-  (set-parameter* [parameter pp i]
+  (set-parameter* [_ pp i]
     (put-entry! pp i daddr))
   Memcpy
   (memcpy-host* [this src byte-count]
@@ -433,14 +433,14 @@
 
 (deftype CURuntimePtr [^Pointer dptr ^LongPointer daddr master]
   Object
-  (hashCode [x]
+  (hashCode [_]
     (hash dptr))
-  (equals [x y]
+  (equals [_ y]
     (and (instance? CURuntimePtr y) (= dptr (.-dptr ^CURuntimePtr y) 0)))
   (toString [_]
     (format "#RuntimePtr[:cuda, 0x%x, %d bytes]" (get-entry daddr 0) (bytesize dptr)))
   Releaseable
-  (release [this]
+  (release [_]
     (locking dptr
       (when-not (null? dptr)
         (when master
@@ -490,10 +490,10 @@
   (sizeof* [_]
     (.sizeof dptr))
   Seqable
-  (seq [a]
+  (seq [_]
     (pointer-seq dptr))
   Parameter
-  (set-parameter* [parameter pp i]
+  (set-parameter* [_ pp i]
     (put-entry! pp i daddr))
   Memcpy
   (memcpy-host* [this src byte-count]
@@ -536,9 +536,9 @@
 
 (deftype CUPinnedPtr [^Pointer hptr ^LongPointer haddr master release-fn]
   Object
-  (hashCode [x]
+  (hashCode [_]
     (hash hptr))
-  (equals [x y]
+  (equals [_ y]
     (and (instance? CUPinnedPtr y) (= (get-entry haddr 0) (get-entry (.-haddr ^CUPinnedPtr y) 0))))
   (toString [_]
     (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
@@ -593,7 +593,7 @@
   (sizeof* [_]
     (.sizeof hptr))
   Seqable
-  (seq [a]
+  (seq [_]
     (pointer-seq hptr))
   Accessor
   (get-entry [_]
@@ -615,10 +615,10 @@
   (put! [this obj]
     (put! hptr obj)
     this)
-  (put! [this obj offset length]
+  (put! [_ obj offset length]
     (put! hptr obj offset length))
   Parameter
-  (set-parameter* [parameter pp i]
+  (set-parameter* [_ pp i]
     (put-entry! pp i haddr))
   Memcpy
   (memcpy-host* [this src byte-count]
@@ -663,9 +663,9 @@
 
 (deftype CUMappedPtr [^Pointer hptr ^LongPointer haddr master]
   Object
-  (hashCode [x]
+  (hashCode [_]
     (hash hptr))
-  (equals [x y]
+  (equals [_ y]
     (and (instance? CUMappedPtr y) (= (get-entry haddr 0) (get-entry (.-haddr ^CUMappedPtr y) 0))))
   (toString [_]
     (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
@@ -721,7 +721,7 @@
   (sizeof* [_]
     (.sizeof hptr))
   Seqable
-  (seq [a]
+  (seq [_]
     (pointer-seq hptr))
   Accessor
   (get-entry [_]
@@ -743,10 +743,10 @@
   (put! [this obj]
     (put! hptr obj)
     this)
-  (put! [this obj offset length]
+  (put! [_ obj offset length]
     (put! hptr obj offset length))
   Parameter
-  (set-parameter* [parameter pp i]
+  (set-parameter* [_ pp i]
     (put-entry! pp i haddr))
   Memcpy
   (memcpy-host* [this src byte-count]
@@ -854,7 +854,7 @@
 
 (deftype StreamCallback [ch]
   IFn
-  (invoke [this hstream status data]
+  (invoke [_ _ status data]
     (go (>! ch (->StreamCallbackInfo (get cu-result-codes status status) (extract data)))))
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
