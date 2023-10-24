@@ -16,8 +16,8 @@
              [utils :refer [count-groups]]]
             [uncomplicate.clojure-cpp
              :refer [byte-pointer get-long get-int get-double get-float]]
-            [uncomplicate.clojurecuda.core :refer [grid-1d grid-2d launch! memcpy-host! parameters
-                                                   set-parameter! set-parameters!]])
+            [uncomplicate.clojurecuda.core
+             :refer [grid-1d grid-2d launch! memcpy-host! parameters set-parameter! set-parameter!]])
   (:import org.bytedeco.javacpp.PointerPointer))
 
 (defn launch-reduce!
@@ -37,7 +37,7 @@
      hstream))
   ([hstream main-kernel reduction-kernel main-params reduction-params m n local-m local-n]
    (let [main-params (if (instance? PointerPointer main-params)
-                       (set-parameters! main-params 0 m n)
+                       (set-parameter! main-params 0 m n)
                        (apply parameters m n main-params))
          reduction-params (if (instance? PointerPointer reduction-params)
                             reduction-params
@@ -48,7 +48,7 @@
          (if (= 1 global-size)
            hstream
            (recur (launch! reduction-kernel (grid-2d m global-size local-m local-n) hstream
-                           (set-parameters! reduction-params 0 m global-size))
+                           (set-parameter! reduction-params 0 m global-size))
                   (count-groups local-n global-size))))
        (throw (IllegalArgumentException.
                (format "local-n %d would cause infinite recursion for n:%d." local-n n)))))))

@@ -70,41 +70,41 @@
       cnt 300
       extra 5]
   (with-context (context (device))
-      (with-release [prog (compile! (program program-source {"dummy" "placeholder"}))
-                     grid (grid-1d cnt (min 256 cnt))]
-        (with-release [modl (module prog)
-                       fun (function modl "inc")
-                       strm (stream :non-blocking)
-                       host-a (float-pointer (+ cnt extra))
-                       gpu-a (mem-alloc-runtime (* Float/BYTES (+ cnt extra)))]
+    (with-release [prog (compile! (program program-source {"dummy" "placeholder"}))
+                   grid (grid-1d cnt (min 256 cnt))]
+      (with-release [modl (module prog)
+                     fun (function modl "inc")
+                     strm (stream :non-blocking)
+                     host-a (float-pointer (+ cnt extra))
+                     gpu-a (mem-alloc-runtime (* Float/BYTES (+ cnt extra)))]
 
-          (facts
-           "Test launch"
-           (fill! host-a 0)
-           (put-entry! host-a 0 1)
-           (put-entry! host-a 10 100)
-           (memcpy-host! host-a gpu-a strm) => gpu-a
-           (launch! fun grid strm (parameters (int cnt) gpu-a)) => strm
-           (synchronize! strm) => strm
-           (memcpy-host! gpu-a host-a strm) => host-a
-           (get-entry host-a 0) => 2.0
-           (get-entry host-a 10) => 101.0
-           (get-entry host-a (dec cnt)) => 1.0
-           (get-entry host-a cnt) => 0.0
-           (get-entry host-a (dec (+ cnt extra))) => 0.0))
+        (facts
+         "Test launch"
+         (fill! host-a 0)
+         (put-entry! host-a 0 1)
+         (put-entry! host-a 10 100)
+         (memcpy-host! host-a gpu-a strm) => gpu-a
+         (launch! fun grid strm (parameters (int cnt) gpu-a)) => strm
+         (synchronize! strm) => strm
+         (memcpy-host! gpu-a host-a strm) => host-a
+         (get-entry host-a 0) => 2.0
+         (get-entry host-a 10) => 101.0
+         (get-entry host-a (dec cnt)) => 1.0
+         (get-entry host-a cnt) => 0.0
+         (get-entry host-a (dec (+ cnt extra))) => 0.0))
 
-        (with-release [modl (module)]
-          (facts
-           "Test device globals"
-           (load! modl prog) => modl
-           (with-release [fun (function modl "constant_inc")
-                          gpu-a (global modl "gpu_a")
-                          constant-gpu-a (global modl "constant_gpu_a")]
-             (pointer-seq (memcpy-host! gpu-a (float-pointer 3))) => (seq [1.0 2.0 3.0])
-             (memcpy! gpu-a constant-gpu-a) => constant-gpu-a
-             (launch! fun (grid-1d 3) (parameters 3 gpu-a))
-             (pointer-seq (memcpy-host! constant-gpu-a (float-pointer 3))) => (seq [1.0 2.0 3.0])
-             (pointer-seq (memcpy-host! gpu-a (float-pointer 3))) => (seq [2.0 4.0 6.0])))))))
+      (with-release [modl (module)]
+        (facts
+         "Test device globals"
+         (load! modl prog) => modl
+         (with-release [fun (function modl "constant_inc")
+                        gpu-a (global modl "gpu_a")
+                        constant-gpu-a (global modl "constant_gpu_a")]
+           (pointer-seq (memcpy-host! gpu-a (float-pointer 3))) => (seq [1.0 2.0 3.0])
+           (memcpy! gpu-a constant-gpu-a) => constant-gpu-a
+           (launch! fun (grid-1d 3) (parameters 3 gpu-a))
+           (pointer-seq (memcpy-host! constant-gpu-a (float-pointer 3))) => (seq [1.0 2.0 3.0])
+           (pointer-seq (memcpy-host! gpu-a (float-pointer 3))) => (seq [2.0 4.0 6.0])))))))
 
 ;; =============== Stream Management Tests ==============================================
 
@@ -287,40 +287,40 @@
 
     (when (info/managed-memory dev)
       (facts
-        "mem-alloc-driver with globally shared attached memory tests."
-        (with-release [host0 (float-pointer [16])
-                       host1 (float-pointer 1)
-                       cuda0 (mem-alloc-driver Float/BYTES :host)
-                       cuda1 (mem-alloc-driver Float/BYTES :global)]
-          (attach-mem! nil cuda0 Float/BYTES :global) => nil
-          (bytesize cuda0) => Float/BYTES
-          (memcpy-host! host0 cuda0) => cuda0
-          (memcpy! cuda0 cuda1) => cuda1
-          (memcpy-host! cuda1 host1) => host1
-          (get-entry host1 0) => 16.0))
+       "mem-alloc-driver with globally shared attached memory tests."
+       (with-release [host0 (float-pointer [16])
+                      host1 (float-pointer 1)
+                      cuda0 (mem-alloc-driver Float/BYTES :host)
+                      cuda1 (mem-alloc-driver Float/BYTES :global)]
+         (attach-mem! nil cuda0 Float/BYTES :global) => nil
+         (bytesize cuda0) => Float/BYTES
+         (memcpy-host! host0 cuda0) => cuda0
+         (memcpy! cuda0 cuda1) => cuda1
+         (memcpy-host! cuda1 host1) => host1
+         (get-entry host1 0) => 16.0))
       (facts
-        "mem-alloc-driver with attached memory tests."
-        (with-release [host0 (float-pointer [17])
-                       host1 (float-pointer 1)
-                       cuda0 (mem-alloc-driver Float/BYTES :host)
-                       cuda1 (mem-alloc-driver Float/BYTES :global)]
-          (let [hstream (attach-mem! cuda0 Float/BYTES :single)]
-            (bytesize cuda0) => Float/BYTES
-            (if (info/concurrent-managed-access dev)
-              (memcpy-host! host0 cuda0) => cuda0
-              (memcpy-host! host0 cuda0) => (throws ExceptionInfo))
-            (memcpy-host! host0 cuda0 hstream) => cuda0
-            (memcpy! cuda0 cuda1 hstream) => cuda1
-            (memcpy-host! cuda1 host1 hstream) => host1
-            (synchronize! hstream)
-            (get-entry host1 0) => 17.0))))
+       "mem-alloc-driver with attached memory tests."
+       (with-release [host0 (float-pointer [17])
+                      host1 (float-pointer 1)
+                      cuda0 (mem-alloc-driver Float/BYTES :host)
+                      cuda1 (mem-alloc-driver Float/BYTES :global)]
+         (let [hstream (attach-mem! cuda0 Float/BYTES :single)]
+           (bytesize cuda0) => Float/BYTES
+           (if (info/concurrent-managed-access dev)
+             (memcpy-host! host0 cuda0) => cuda0
+             (memcpy-host! host0 cuda0) => (throws ExceptionInfo))
+           (memcpy-host! host0 cuda0 hstream) => cuda0
+           (memcpy! cuda0 cuda1 hstream) => cuda1
+           (memcpy-host! cuda1 host1 hstream) => host1
+           (synchronize! hstream)
+           (get-entry host1 0) => 17.0))))
 
     (facts
      "mem-alloc-registered tests."
      (with-release [host0 (byte-pointer Float/BYTES)
                     host1 (byte-pointer Float/BYTES)
-                    cuda0 (mem-register-pinned host0)
-                    cuda1 (mem-register-pinned host1)]
+                    cuda0 (mem-register-pinned! host0)
+                    cuda1 (mem-register-pinned! host1)]
 
        (bytesize cuda0) => Float/BYTES
        (put-float! host0 0 44.0)
@@ -330,51 +330,51 @@
 ;; ================= Peer Access Management Tests =====================================
 
 (facts
-  "Peer access tests (requires 2 devices)."
-  (let [num-dev (device-count)
-        devices (mapv device (range num-dev))
-        combinations (set (for [x (range num-dev) y (range num-dev) :when (not= x y)] #{x y}))
-        p2p? (fn [num-pair] (let [[a b] (vec num-pair)
-                                  dev-a (nth devices a)
-                                  dev-b (nth devices b)]
-                              (when (and (p2p-attribute dev-a dev-b :access-supported)
-                                         (can-access-peer dev-a dev-b)
-                                         (can-access-peer dev-b dev-a))
-                                [dev-a dev-b])))]
-    (if-let [[dev-a dev-b] (some p2p? combinations)]
-      (let [program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cu")
-            ^:const vctr-len 3]
-        (with-release [host-a (float-array [1 2 3])
-                       host-b (float-array [2 3 4])
-                       host-sum (float-array vctr-len)
-                       ctx (context dev-a)
-                       peer-ctx (context dev-b)]
-          (in-context ctx
-                      (with-release [prog (compile! (program program-source))
-                                     m (module prog)
-                                     vector-add (function m "add")
-                                     gpu-a (mem-alloc-runtime (* Float/BYTES vctr-len))
-                                     gpu-a-sum (mem-alloc-runtime (* Float/BYTES vctr-len))
-                                     gpu-b (in-context peer-ctx (mem-alloc-runtime (* Float/BYTES vctr-len)))]
-                        (disable-peer-access! peer-ctx) => (throws ExceptionInfo)
-                        (in-context peer-ctx (disable-peer-access! ctx) => (throws ExceptionInfo))
-                        (memcpy-host! host-a gpu-a) => gpu-a
-                        (in-context peer-ctx (memcpy-host! host-b gpu-b) => gpu-b)
-                        (enable-peer-access! peer-ctx) => peer-ctx
-                        (in-context peer-ctx (enable-peer-access! ctx) => ctx)
-                        (launch! vector-add (grid-1d vctr-len) (parameters vctr-len gpu-a gpu-b gpu-a-sum))
-                        (synchronize!)
-                        (memcpy-host! gpu-a-sum host-sum) => (seq [3.0 5.0 7.0])
-                        (disable-peer-access! peer-ctx) => peer-ctx
-                        (in-context peer-ctx (disable-peer-access! ctx) => ctx))))
-        (when-let [dev (first devices)]
-          (p2p-attribute dev dev :access-supported) => (throws ExceptionInfo)
-          (can-access-peer dev dev) => false)))))
+ "Peer access tests (requires 2 devices)."
+ (let [num-dev (device-count)
+       devices (mapv device (range num-dev))
+       combinations (set (for [x (range num-dev) y (range num-dev) :when (not= x y)] #{x y}))
+       p2p? (fn [num-pair] (let [[a b] (vec num-pair)
+                                 dev-a (nth devices a)
+                                 dev-b (nth devices b)]
+                             (when (and (p2p-attribute dev-a dev-b :access-supported)
+                                        (can-access-peer dev-a dev-b)
+                                        (can-access-peer dev-b dev-a))
+                               [dev-a dev-b])))]
+   (if-let [[dev-a dev-b] (some p2p? combinations)]
+     (let [program-source (slurp "test/cuda/examples/jnvrtc-vector-ad.cdu")
+           ^:const vctr-len 3]
+       (with-release [host-a (float-array [1 2 3])
+                      host-b (float-array [2 3 4])
+                      host-sum (float-array vctr-len)
+                      ctx (context dev-a)
+                      peer-ctx (context dev-b)]
+         (in-context ctx
+                     (with-release [prog (compile! (program program-source))
+                                    m (module prog)
+                                    vector-add (function m "add")
+                                    gpu-a (mem-alloc-runtime (* Float/BYTES vctr-len))
+                                    gpu-a-sum (mem-alloc-runtime (* Float/BYTES vctr-len))
+                                    gpu-b (in-context peer-ctx (mem-alloc-runtime (* Float/BYTES vctr-len)))]
+                       (disable-peer-access! peer-ctx) => (throws ExceptionInfo)
+                       (in-context peer-ctx (disable-peer-access! ctx) => (throws ExceptionInfo))
+                       (memcpy-host! host-a gpu-a) => gpu-a
+                       (in-context peer-ctx (memcpy-host! host-b gpu-b) => gpu-b)
+                       (enable-peer-access! peer-ctx) => peer-ctx
+                       (in-context peer-ctx (enable-peer-access! ctx) => ctx)
+                       (launch! vector-add (grid-1d vctr-len) (parameters vctr-len gpu-a gpu-b gpu-a-sum))
+                       (synchronize!)
+                       (memcpy-host! gpu-a-sum host-sum) => (seq [3.0 5.0 7.0])
+                       (disable-peer-access! peer-ctx) => peer-ctx
+                       (in-context peer-ctx (disable-peer-access! ctx) => ctx))))
+       (when-let [dev (first devices)]
+         (p2p-attribute dev dev :access-supported) => (throws ExceptionInfo)
+         (can-access-peer dev dev) => false)))))
 
 (facts
  "Runtime API Pointer kernel launch test"
  (let [dev (device 0)
-       program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cu")
+       program-source (slurp "test/cuda/examples/jnvrtc-vector-add.cu")
        ^:const vctr-len 3]
    (with-release [host-a (float-pointer [1 2 3])
                   host-b (float-pointer [2 3 4])

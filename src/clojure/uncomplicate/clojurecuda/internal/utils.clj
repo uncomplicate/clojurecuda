@@ -7,7 +7,7 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns ^{:author "Dragan Djuric"}
-  uncomplicate.clojurecuda.internal.utils
+    uncomplicate.clojurecuda.internal.utils
   "Utility functions used as helpers in other ClojureCUDA namespaces.
   The user of the ClojureCUDA library would probably not need to use
   any of the functions defined here."
@@ -18,20 +18,14 @@
 ;; ============= Error Codes ===================================================
 
 (defn error
-  "Converts an CUDA error code to an [ExceptionInfo]
-  (http://clojuredocs.org/clojure.core/ex-info)
+  "Converts an CUDA error code to an [ExceptionInfo] (http://clojuredocs.org/clojure.core/ex-info)
   with richer, user-friendly information.
-
-  Accepts a long `err-code` that should be one of the codes defined in
-  CUDA standard, and an optional `details` argument that could be
-  anything that you think is informative.
-
-  Also see the discussion about
+  Accepts a long `err-code` that should be one of the codes defined in CUDA standard, and an
+  optional `details` argument that could be anything that you think is informative.
 
   Examples:
-
-      (error 0) => an ExceptionInfo instance
-      (error -5 {:comment \"Why here?\"\"}) => an ExceptionInfo instance
+  (error 0) => an ExceptionInfo instance
+  (error -5 {:comment \"Why here?\"\"}) => an ExceptionInfo instance
   "
   ([^long err-code details]
    (let [err (get cu-result-codes err-code err-code)]
@@ -47,8 +41,7 @@
   returning computation results through side-effects in arguments.
 
   Example:
-
-      (with-check (some-jcuda-call-that-returns-error-code) result)
+  (with-check (some-jcuda-call-that-returns-error-code) result)
   "
   ([status form]
    `(utils/with-check error ~status ~form))
@@ -63,7 +56,7 @@
   substitutes the result with the [ExceptionInfo](http://clojuredocs.org/clojure.core/ex-info) object."
   [form]
   `(try ~form
-         (catch ExceptionInfo ex-info#
-           (if (= :cuda (:type (ex-data ex-info#)))
-             (:name (ex-data ex-info#))
-             (throw ex-info#)))))
+        (catch ExceptionInfo ex-info#
+          (if (= :cuda (:type (ex-data ex-info#)))
+            (:name (ex-data ex-info#))
+            (throw ex-info#)))))

@@ -9,9 +9,36 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.core
   "Core ClojureCUDA functions for CUDA **host** programming. The kernels should
-  be provided as strings (that may be stored in files) or binaries, written in CUDA C/C++.
+  be provided as strings (that may be stored and read from files) or binaries, written in CUDA C/C++.
 
-  Where applicable, methods throw ExceptionInfo in case of errors thrown by the CUDA driver.
+  Many examples are available in ClojureCUDA [core test](https://github.com/uncomplicate/clojurecuda/blob/master/test/clojure/uncomplicate/clojurecuda/core_test.clj).
+  You can see how to write CUDA [kernels here](https://github.com/uncomplicate/clojurecuda/tree/master/test/cuda/examples)
+  and [here](https://github.com/uncomplicate/clojurecuda/tree/master/test/cuda/uncomplicate/clojurecuda/kernels)
+  and examples of [how to load them here](https://github.com/uncomplicate/clojurecuda/tree/master/test/clojure/uncomplicate/clojurecuda/examples/).
+
+  For more advanced examples, please read the source code of the CUDA engine of [Neanderthal linear algebra library](https://github.com/uncomplicate/neanderthal) (mainly general CUDA and cuBLAS are used there),
+  and the [Deep Diamond tensor and linear algebra library](https://github.com/uncomplicate/neanderthal) (for extensive use of cuDNN).
+
+  Here's a categorized map of core functions. Most functions throw `ExceptionInfo` in case of errors
+  thrown by the CUDA driver.
+
+  - Device management: [[init]], [[device-count]], [[device]].
+  - Context management: [[context]], [[current-context]], [[current-context!]], [[put-context!]],
+  [[push-context!]], [[in-context]], [[with-context]], [[with-default]].
+  - Memory management: [[memcpy!]], [[mumcpy-to-host!]], [[memcpy-to-device!]], [[memset!]].
+  [[mem-sub-region]], [[mem-alloc-driver]], [[mem-alloc-runtime]], [[cuda-malloc]], [[cuda-free!]]
+  [[mem-alloc-pinned]], [[mem-register-pinned!]], [[mem-alloc-mapped]],
+  - Module management: [[link]], [[link-complete!]], [[load!]], [[module]].
+  - Execution control: [[gdid-1d]], [[grid-2d]], [[grid-3d]], [[global]], [[set-parameter!]],
+  [[parameters]], [[function]], [[launch!]].
+  - Stream management: [[stream]], [[default-stream]], [[ready?]], [[synchronize!]],
+  [[add-host-fn!]], [[listen!]], [[wait-event!]], [[attach-mem!]].
+  - Event management: [[event]], [[elapsed-time!]], [[record!]], [[can-access-peer]],
+  [[p2p-attribute]], [[disable-peer-access!]], [[enable-peer-access!]].
+  - NVRTC program JIT: [[program]], [[program-log]], [[compile!]], [[ptx]].
+
+  Please see [CUDA Driver API](https://docs.nvidia.com/cuda/pdf/CUDA_Driver_API.pdf) for details
+  not discussed in ClojureCUDA documentation.
   "
   (:require [uncomplicate.commons
              [core :refer [with-release let-release info wrap extract bytesize sizeof size]]
@@ -35,20 +62,27 @@
            [org.bytedeco.cuda.cudart CUctx_st CUlinkState_st CUmod_st CUfunc_st CUstream_st CUevent_st]))
 
 (defn init
-  "Initializes the CUDA driver."
+  "Initializes the CUDA driver. This function must be called before any other function
+  from ClojureCUDA in the current process.
+  See [CUDA Initialization](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__INITIALIZE.html)
+  "
   []
   (with-check (cudart/cuInit 0) true))
 
 ;; ================== Device Management ====================================
 
 (defn device-count
-  "Returns the number of CUDA devices on the system."
+  "Returns the number of CUDA devices on the system.
+  See [CUDA Device Management](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__DEVICE.html).
+  "
   ^long []
   (let [res (int-pointer 1)]
     (with-check (cudart/cuDeviceGetCount res) (get-entry res 0))))
 
 (defn device
-  "Returns a device specified with its ordinal number or string `id`"
+  "Returns a device specified with its ordinal number `id` or string PCI Bus `id`.
+  See [CUDA Device Management](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__DEVICE.html).
+  "
   ([id]
    (with-release [res (int-pointer 1)]
      (with-check
@@ -64,12 +98,10 @@
 
 (defn context
   "Creates a CUDA context on the `device` using a keyword `flag`.
+  For available flags, see [[internal.constants/ctx-flags]]. The default is none.
+  The context must be released after use.
 
-  Valid flags are: `:sched-auto`, `:sched-spin`, `:sched-yield`, `:sched-blocking-sync`,
-  `:map-host`, `:lmem-resize-to-max`. The default is none.
-  Must be released after use.
-
-  Also see [cuCtxCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
+  See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   ([dev flag]
    (context* (extract dev)
@@ -80,16 +112,14 @@
 
 (defn current-context
   "Returns the CUDA context bound to the calling CPU thread.
-
-  See [cuCtxGetCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   []
   (current-context*))
 
 (defn current-context!
   "Binds the specified CUDA context `ctx` to the calling CPU thread.
-
-  See [cuCtxSetCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   [ctx]
   (current-context* ctx)
@@ -97,8 +127,7 @@
 
 (defn pop-context!
   "Pops the current CUDA context `ctx` from the current CPU thread.
-
-  See [cuCtxPopCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   []
   (let [ctx (CUctx_st.)]
@@ -106,15 +135,16 @@
 
 (defn push-context!
   "Pushes a context `ctx` on the current CPU thread.
-
-  See [cuCtxPushCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
+  See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   [^CUctx_st ctx]
   (with-check (cudart/cuCtxPushCurrent ctx) ctx))
 
 (defmacro in-context
   "Pushes the context `ctx` to the top of the context stack, evaluates the body with `ctx`
-  as the current context, and pops the context from the stack. Does NOT release the context.
+  as the current context, and pops the context from the stack.
+  Does NOT release the context, unlike [[with-context]].
+  See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   [ctx & body]
   `(try
@@ -124,14 +154,17 @@
 
 (defmacro with-context
   "Pushes the context `ctx` to the top of the context stack, evaluates the body, and pops the context
-  from the stack. Releases the context.
+  from the stack. Releases the context, unlike [[in-context]].
+  See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   [ctx & body]
   `(with-release [ctx# ~ctx]
      (in-context ctx# ~@body)))
 
 (defmacro with-default
-  "Initializes CUDA, creates the default context and executes the body in it."
+  "Initializes CUDA, creates the default context and executes the body in it.
+  See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
+  "
   [& body]
   `(do
      (init)
@@ -141,25 +174,25 @@
 
 ;; ================== Memory Management  ==============================================
 
-(defn check-size [ptr ^long offset ^long byte-count]
+(defn ^:private check-size [ptr ^long offset ^long byte-count]
   (when-not (<= 0 offset (+ offset byte-count) (bytesize ptr))
     (dragan-says-ex "Requested bytes are out of the bounds of this device pointer."
                     {:offset offset :requested byte-count :available (bytesize ptr)})))
 
-
 (defn memcpy!
-  "Copies `byte-count` or all possible device memory from `src` to `dst`. If `hstream` is supplied,
-  executes asynchronously.
-
-  See [cuMemcpy](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)"
+  "Copies `byte-count` or maximum available device memory from `src` to `dst`.
+  TODO mapped, pinned
+  If `hstream` is provided, executes asynchronously.
+  See [CUDA Memory Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
+  "
   ([src dst]
    (memcpy! src dst (min (bytesize src) (bytesize dst)) nil))
-  ([src dst count-or-stream]
-   (if (number? count-or-stream)
-     (do (check-size src 0 count-or-stream)
-         (check-size dst 0 count-or-stream)
-         (memcpy* dst src count-or-stream nil))
-     (memcpy! src dst (min (bytesize src) (bytesize dst)) count-or-stream))
+  ([src dst byte-count-or-stream]
+   (if (number? byte-count-or-stream)
+     (do (check-size src 0 byte-count-or-stream)
+         (check-size dst 0 byte-count-or-stream)
+         (memcpy* dst src byte-count-or-stream nil))
+     (memcpy! src dst (min (bytesize src) (bytesize dst)) byte-count-or-stream))
    dst)
   ([src dst ^long byte-count hstream]
    (check-size src 0 byte-count)
@@ -168,10 +201,11 @@
    dst))
 
 (defn memcpy-to-host!
-  "Copies `byte-count` or all possible memory from device `src` to host `dst`, one of which
-  has to be accessible from the host. If `hstream` is provided, the copy is asynchronous.
-
-  See [cuMemcpyDtoH](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
+  "Copies `byte-count` or maximum available memory from device `src` to host `dst`. Useful when `src`
+  or `dst` is a generic pointer for which it cannot be determined whether it manages memory on host
+  or on device (see [[cuda-malloc!]]).
+  If `hstream` is provided, executes asynchronously.
+  See [CUDA Memory Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([^Pointer src ^Pointer dst ^long byte-count hstream]
    (check-size src 0 byte-count)
@@ -191,10 +225,11 @@
    dst))
 
 (defn memcpy-to-device!
-  "Copies `byte-count` or all possible memory from host `src` to device `dst`, one of which
-  has to be accessible from the host. If `hstream` is provided, the copy is asynchronous.
-
-  See [cuMemcpyDtoH](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
+  "Copies `byte-count` or all possible memory from host `src` to device `dst`. Useful when `src` or
+  `dst` is a generic pointer for which it cannot be determined whether it manages memory on host or
+  on device (see [[cuda-malloc!]]).
+  If `hstream` is provided, executes asynchronously.
+  See [CUDA Memory Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([^Pointer src ^Pointer dst ^long byte-count hstream]
    (check-size src 0 byte-count)
@@ -215,10 +250,10 @@
 
 (defn memcpy-host!
   "Copies `byte-count` or all possible memory from `src` to `dst`, one of which
-  has to be accessible from the host. If `hstream` is provided, the copy is asynchronous.
-  A polymorphic function that figures out what needs to be done.
-
-  See [cuMemcpyXtoY](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
+  has to be accessible from the host. If `hstream` is provided, executes asynchronously.
+  A polymorphic function that figures out what needs to be done. Supports everything
+  except pointers created by [[cuda-malloc!]].
+  See [CUDA Memory Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([src dst ^long byte-count hstream]
    (check-size src 0 byte-count)
@@ -237,19 +272,19 @@
    dst))
 
 (defn memset!
-  "Sets `len` or all 32-bit segments of `dptr` to 32-bit integer `value`. If `hstream` is
-  provided, does this asynchronously.
-
-  See [cuMemset32D](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
+  "Sets `n` elements or all segments of `dptr` memory to `value` (supports all Java primitive number
+  types except `double`, and `long` with value larger than `Integer/MAX_VALUE`). If `hstream` is
+  provided, executes asynchronously.
+  See [CUDA Memory Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([dptr value]
    (memset* value (cu-address* dptr) (quot (bytesize dptr) (sizeof value)))
    dptr)
-  ([dptr value arg]
-   (if (integer? arg)
-     (do (check-size dptr 0 (* (sizeof value) (long arg)))
-         (memset* value (cu-address* dptr) arg))
-     (memset* value (cu-address* dptr) (quot (bytesize dptr) (sizeof value)) arg))
+  ([dptr value n-or-hstream]
+   (if (integer? n-or-hstream)
+     (do (check-size dptr 0 (* (sizeof value) (long n-or-hstream)))
+         (memset* value (cu-address* dptr) n-or-hstream))
+     (memset* value (cu-address* dptr) (quot (bytesize dptr) (sizeof value)) n-or-hstream))
    dptr)
   ([dptr value ^long n hstream]
    (if hstream
@@ -258,10 +293,12 @@
      (memset! dptr value n))
    dptr))
 
-;; ==================== Linear memory ================================================
+;; ==================== Driver-managed device memory ===============================================
 
 (defn mem-sub-region
-  "Creates a [[CUDevicePtr]] that references a sub-region of `mem` from `origin` to `byte-count`."
+  "Creates CUDA device memory object that references a sub-region of `mem` from `origin`
+  to `byte-count`, or maximum available byte size.
+  "
   ([mem ^long origin ^long byte-count]
    (check-size mem origin byte-count)
    (let-release [sub-dptr (long-pointer 1)]
@@ -270,81 +307,90 @@
    (mem-sub-region mem origin (bytesize mem))))
 
 (defn mem-alloc-driver
-  "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
-  system, specified by a keyword `flag`.
-
-  Returns a [[CULinearMemory]] object.
-  Valid flags are: `:global`, `:host` and `:single` (the default).
-  The memory is not cleared. `size` must be greater than `0`.
-
-  See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
+  "Allocates the `byte-size` bytes of uninitialized memory that will be automatically managed by the
+  Unified Memory system, specified by a keyword `flag`. For available flags, see [[internal.constants/mem-attach-flags]].
+  Returns a CUDA device memory object, which can NOT be extracted as a `Pointer`, but can be accessed
+  directly through its address in the device memory.
+  See [CUDA Driver API Memory Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
-  ([^long bytesize flag]
-   (mem-alloc-managed* bytesize (or (mem-attach-flags flag)
-                                    (throw (ex-info "Unknown mem-attach flag."
-                                                    {:flag flag :available mem-attach-flags})))))
-  ([^long bytesize]
-   (mem-alloc-managed* bytesize cudart/CU_MEM_ATTACH_GLOBAL)))
+  ([^long byte-size flag]
+   (mem-alloc-managed* (max 0 byte-size)
+                       (or (mem-attach-flags flag)
+                           (throw (ex-info "Unknown mem-attach flag."
+                                           {:flag flag :available mem-attach-flags})))))
+  ([^long byte-size]
+   (mem-alloc-managed* byte-size cudart/CU_MEM_ATTACH_GLOBAL)))
 
 ;; =================== Runtime API Memory ================================================
 
 (defn mem-alloc-runtime
-  "Allocates the `bytesize` bytes of memory on the device.
-
-  The old memory content is not cleared. `bytesize` must be greater than `0`.
-
-  See [cuMemAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
+  "Allocates the `byte-size` bytes of uninitialized memory that will be automatically managed by the
+  Unified Memory system. Returns a CUDA device memory object managed by the CUDA runtime API, which
+  can be extracted as a `Pointer`. Equivalent unwrapped `Pointer` can be created by [[cuda-malloc]].
+  See [CUDA Runtime API Memory Management](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__MEMORY.html)
   "
-  ([^long bytesize type] ;;TODO functions that receive type should accept size instead of bytesize
+  ([^long byte-size type] ;;TODO functions that receive type should accept size instead of bytesize
    (if-let [t (type-pointer type)]
-     (malloc-runtime* (max 0 bytesize) t)
+     (malloc-runtime* (max 0 byte-size) t)
      (throw (ex-info (format "Unknown data type: %s." (str type)) {}))))
-  ([^long bytesize]
-   (malloc-runtime* (max 0 bytesize))))
+  ([^long byte-size]
+   (malloc-runtime* (max 0 byte-size))))
 
 (defn cuda-malloc
-  ([^long bytesize]
-   (let-release [p (byte-pointer nil)]
-     (with-check (cudart/cudaMalloc p bytesize) (capacity! p bytesize))))
-  ([^long bytesize pointer-type]
-   (if-let [pt (type-pointer pointer-type)]
+  "Returns a `Pointer` to `byte-size` bytes of uninitialized memory that will be automatically
+  managed by the Unified Memory system. The pointer is managed by the CUDA runtime API.
+  Optionally, accepts a `type` of the pointer as a keyword (`:float` or `Float/TYPE` for
+  `FloatPointer`, etc.).
+  This pointer has to be manually released by [[cuda-free!]]. For a more seamless experience,
+  use the wrapper provided by the [[mem-alloc-runtime]] function.
+  See [CUDA Runtime API Memory Management](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__MEMORY.html)
+  "
+  ([^long byte-size]
+   (let [byte-size (max 0 byte-size)]
      (let-release [p (byte-pointer nil)]
-       (with-check (cudart/cudaMalloc p bytesize) (pt (capacity! p bytesize))))
+       (with-check (cudart/cudaMalloc p byte-size) (capacity! p byte-size)))))
+  ([^long byte-size type]
+   (if-let [pt (type-pointer type)]
+     (let [byte-size (max 0 byte-size)]
+       (let-release [p (byte-pointer nil)]
+         (with-check (cudart/cudaMalloc p byte-size) (pt (capacity! p byte-size)))))
      (throw (ex-info (format "Unknown data type: %s." (str type)) {})))))
 
-(defn cuda-free! [^Pointer dptr]
+(defn cuda-free!
+  "Frees the runtime device memory that has been created by [[cuda-malloc]].
+  See [CUDA Runtime API Memory Management](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__MEMORY.html)
+  "
+  [^Pointer dptr]
   (when-not (null? dptr)
     (with-check (cudart/cudaFree (position! dptr 0))
       (do (.deallocate dptr) (.setNull dptr))))
   dptr)
 
-;; =================== Pinned Memory ================================================
+;; =================== Pinned and Mapped Memory ================================================
 
 (defn mem-alloc-pinned
-  "Allocates `bytesize` bytes of page-locked memory, 'pinned' on the host, using keyword `flags`.
-  For available flags, see [constants/mem-host-alloc-flags]
-
-  Valid flags are: `:portable`, `:devicemap` and `:writecombined`. The default is none.
-  The memory is not cleared. `bytesize` must be greater than `0`.
-
-  Pinned memory is optimized for the `memcpy-host!` operation, while 'mapped' memory is optimized for `memcpy!`.
-
-  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
+  "Allocates `byte-size` bytes of uninitialized page-locked memory, 'pinned' on the host, using
+  keyword `flags`. For available flags, see [[internal.constants/mem-host-alloc-flags]]; the default
+  is `:none`. Optionally, accepts a `type` of the pointer as a keyword (`:float` or `Float/TYPE` for
+  `FloatPointer`, etc.).
+  Pinned memory is optimized for the [[memcpy-host!]] function, while 'mapped' memory is optimized
+  for [[memcpy!]].
+  See [CUDA Device Driver API Memory Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
-  ([^long bytesize]
-   (mem-host-alloc* (max 0 bytesize) 0))
-  ([^long bytesize flags]
-   (if-let [t (type-pointer flags)]
-     (mem-host-alloc* (max 0 bytesize) 0 t)
-     (mem-host-alloc* (max 0 bytesize)
-                      (if (keyword? flags)
-                        (or (mem-host-alloc-flags flags)
+  ([^long byte-size]
+   (mem-host-alloc* (max 0 byte-size) 0))
+  ([^long byte-size type-or-flags]
+   (if-let [t (type-pointer type-or-flags)]
+     (mem-host-alloc* (max 0 byte-size) 0 t)
+     (mem-host-alloc* (max 0 byte-size)
+                      (if (keyword? type-or-flags)
+                        (or (mem-host-alloc-flags type-or-flags)
                             (throw (ex-info "Unknown mem-host-alloc flag."
-                                            {:flag flags :available mem-host-alloc-flags})))
-                        (mask mem-host-alloc-flags flags)))))
-  ([^long bytesize type flags]
+                                            {:flag type-or-flags :available mem-host-alloc-flags})))
+                        (mask mem-host-alloc-flags type-or-flags)))))
+  ([^long byte-size type flags]
    (if-let [t (type-pointer type)]
-     (mem-host-alloc* (max 0 bytesize)
+     (mem-host-alloc* (max 0 byte-size)
                       (if (keyword? flags)
                         (or (mem-host-alloc-flags flags)
                             (throw (ex-info "Unknown mem-host-alloc flag."
@@ -353,15 +399,13 @@
                       t)
      (throw (ex-info (format "Unknown data type: %s." (str type)) {})))))
 
-(defn mem-register-pinned
-  "Registers previously allocated Java `memory` structure and pins it, using keyword `flags`.
-
-  Valid flags are: `:portable`, and `:devicemap`. The default is none.
-  The memory is not cleared.
-
-  Pinned memory is optimized for the `memcpy-host!` operation, while 'mapped' memory is optimized for `memcpy!`.
-
-  See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
+(defn mem-register-pinned!
+  "Registers previously instantiated host pointer, 'pinned' from the device, using
+  keyword `flags`. For available flags, see [[internal.constants/mem-host-register-flags]]; the
+  default is `:none`. Returns the pinned object equivalent to the one created by [[mem-alloc-pinned]].
+  Pinned memory is optimized for the [[memcpy-host!]] function, while 'mapped' memory is
+  optimized for [[memcpy!]].
+  See [CUDA Device Driver API Memory Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
   ([memory flags]
    (mem-host-register* memory (if (keyword? flags)
@@ -373,25 +417,24 @@
    (mem-host-register* memory 0)))
 
 (defn mem-alloc-mapped
-  "Allocates `size` bytes of memory 'mapped' to the host.
-
-  Mapped memory is optimized for the `memcpy!` operation, while 'pinned' memory is optimized for `memcpy-host!`.
-
-  See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
+  "Allocates `byte-size` bytes of uninitialized host memory, 'mapped' to the device. Optionally,
+  accepts a `type` of the pointer as a keyword (`:float` or `Float/TYPE` for `FloatPointer`, etc.).
+  Mapped memory is optimized for the [[memcpy!]] operation, while 'pinned' memory is optimized for
+  [[memcpy-host!]].
+  See [CUDA Driver API Memory Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html)
   "
-  ([^long size]
-   (mem-alloc-host* (max 0 size)))
-  ([^long size type]
-   (mem-alloc-host* (max 0 size) (type-pointer type))))
+  ([^long byte-size]
+   (mem-alloc-host* (max 0 byte-size)))
+  ([^long byte-size type]
+   (mem-alloc-host* (max 0 byte-size) (type-pointer type))))
 
 ;; ================== Module Management =====================================
 
 (defn link
-  "Invokes CUDA linker on data provided as a vector `[[type source <options> <name>], ...]`.
-  Produces a cubin compiled for particular architecture
-
-  See [cuLinkCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html) and
-  related `likadd` functions.
+  "Invokes the CUDA linker on data provided as a vector `[[type source <options> <name>], ...]`.
+  Produces a cubin compiled for a particular Nvidia architecture.
+  Please see relevant examples from the test folder.
+  See [CUDA Module Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
   ([data options]
    (let-release [res (CUlinkState_st.)]
@@ -401,7 +444,10 @@
   ([]
    (CUlinkState_st.)))
 
-(defn link-complete [^CUlinkState_st link-state]
+(defn link-complete!
+  "Completes the link state created by [[link]], so that it can be loaded by the [[module]] function.
+  Please see relevant examples from the test folder."
+  [^CUlinkState_st link-state]
   (let-release [cubin-image (byte-pointer nil)]
     (with-release [size-out (size-t-pointer 1)]
       (with-check
@@ -409,17 +455,17 @@
         (capacity! cubin-image (get-entry size-out 0))))))
 
 (defn load!
-  "Load a module's data from a [[ptx]] string, `nvrtcProgram`, java path, or a binary `data`,
-  for already existing module.
-
-  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
+  "Load module's data from a [[ptx]] string, nvrtc program, java path, or binary `data`.
+  Please see relevant examples from the test folder.
+  See [CUDA Module Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
   [m data]
   (module-load* (safe (pointer data)) m)
   m)
 
 (defn module
-  "Creates a new CUDA module and loads a string, nvrtc program, or binary `data`."
+  "Creates a new CUDA module and loads a string, nvrtc program, or binary `data`.
+  See [CUDA Module Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)"
   ([]
    (CUmod_st.))
   ([data]
@@ -465,9 +511,9 @@
                (count-groups block-z dim-z) block-x block-y block-z))))
 
 (defn global
-  "Returns CUDA global linear memory named `name` from module `m`, with optionally specified size.
-
-  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
+  "Returns CUDA global device memory object named `name` from module `m`. Global memory is
+  typically defined in C++ source files of CUDA kernels.
+  See [CUDA Module Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
   [^CUmod_st m ^String name]
   (let-release [dptr (long-pointer 1)]
@@ -478,51 +524,41 @@
         (->CUDevicePtr dptr (get-entry byte-size 0) false)))))
 
 (defn set-parameter!
-  "Sets the `i`th parameter in a parameter array `arr`"
-  [^PointerPointer pp ^long i parameter]
-  (if (< -1 i (size pp))
-    (set-parameter* parameter (extract pp) i)
-    (throw (ex-info "Index out of bounds." {:requested i :available (size pp)})))
-  pp)
-
-(defn set-parameters!
   "Sets the `i`th parameter in a parameter array `pp` and the rest of `parameters` in places after `i`."
   [^PointerPointer pp i parameter & parameters]
-  (reduce (fn [^long i param]
-            (set-parameter! pp i param)
-            (inc i))
-          i
-          (cons parameter parameters))
-  pp)
+  (if (< -1 (long i) (size pp))
+    (set-parameter* parameter (extract pp) i)
+    (throw (ex-info "Index out of bounds." {:requested i :available (size pp)})))
+  (if parameters
+    (recur pp (inc (long i)) (first parameters) (next parameters))
+    pp))
 
 (defn parameters
-  "Creates an `PointerPointer`s to CUDA `params`. `params` can be any object on
-  device ([[CULinearMemory]] for example), or host (arrays, numbers) that makes sense as a kernel
-  parameter per CUDA specification. Use the result as an parameter argument in [[launch!]].
+  "Creates an `PointerPointer`s to CUDA `parameter`'s. `parameter` can be any object on
+  device (Device API memory, Runtime API memory, JavaCPP pointers), or host (arrays, numbers, JavaCPP
+  pointers) that makes sense as a kernel parameter per CUDA specification. Use the result as a parameter
+  argument in [[launch!]].
   "
   ([parameter & parameters]
-   (let [len (if parameters (inc (count parameters)) 1)
-         pp (pointer-pointer len)]
-     (apply set-parameters! pp 0 parameter parameters))))
+   (let-release [len (if parameters (inc (count parameters)) 1)
+                 pp (pointer-pointer len)]
+     (apply set-parameter! pp 0 parameter parameters))))
 
 ;; ====================== Execution Control ==================================
 
 (defn function
   "Returns CUDA kernel function named `name` located in module `m`.
-
-  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
+  See [CUDA Module Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
   [^CUmod_st m ^String name]
   (let [res (CUfunc_st.)]
     (with-check (cudart/cuModuleGetFunction res m name) {:name name} res)))
 
 (defn launch!
-  "Invokes the kernel `fun` on a grid-dim grid of blocks, using parameters `params`.
-
+  "Invokes the kernel `fun` on a `grid-dim` grid of blocks, usinng `params` `PointerPointer`.
   Optionally, you can specify the amount of shared memory that will be available to each thread block,
   and `hstream` to use for execution.
-
-  See [cuModuleGetFunction](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
+  See [CUDA Module Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html)
   "
   ([^CUfunc_st fun ^GridDim grid-dim shared-mem-bytes ^CUstream_st hstream ^PointerPointer params]
    (with-check
@@ -539,11 +575,9 @@
 ;; ================== Stream Management ======================================
 
 (defn stream
-  "Create a stream using an optional integer `priority` and a keyword `flag`.
-
-  Valid `flag`s are `:default` and `:non-blocking`.
-
-  See [cuStreamCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
+  "Creates a stream using an optional integer `priority` and a keyword `flag`.
+  For available flags, see [[internal.constants/stream-flags]]
+  See [CUDA Stream Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
   "
   ([]
    (stream* cudart/CU_STREAM_DEFAULT))
@@ -557,30 +591,28 @@
 
 (def default-stream
   ^{:const true
-    :doc "The default per-thread stream"}
+    :doc "The default per-thread stream."}
   (wrap cudart/CU_STREAM_PER_THREAD))
 
 (defn ready?
   "Determines status (ready or not) of a compute stream or event `obj`.
-
-  See [cuStreamQuery](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html),
-  and [cuEventQuery](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+  See [CUDA Stream Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
+  and [CUDA Event Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
   [obj]
   (= cudart/CUDA_SUCCESS (ready* (extract obj))))
 
 (defn synchronize!
-  "Block for the current context's or `stream`'s tasks to complete."
+  "Blocks the current thread until the context's or `hstream`'s tasks complete."
   ([]
    (with-check (cudart/cuCtxSynchronize) true))
   ([^CUstream_st hstream]
    (with-check (cudart/cuStreamSynchronize hstream) hstream)))
 
 (defn add-host-fn!
-  "Adds a [[host-fn]] to a compute stream, with optional `data` related to the call.
+  "Adds host function `f` to a compute stream, with optional `data` related to the call.
   If `data` is not provided, places `hstream` under data.
-
-  See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
+  "
   ([hstream f data]
    (add-host-fn* hstream f data)
    hstream)
@@ -589,10 +621,9 @@
    hstream))
 
 (defn listen!
-  "Adds a [[host-fn]] to a compute stream, with optional `data` related to the call.
-  If `data` is not provided, places `hstream` under data.
-
-  See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
+  "Adds a host function listener to a compute stream, with optional `data` related to the call,
+  and connects it to a Clojure channel `chan`. If `data` is not provided, places `hstream` under data.
+  "
   ([hstream ch data]
    (let [data (safe (pointer data))]
      (add-host-fn* hstream (host-fn* data ch) data)
@@ -602,48 +633,49 @@
    hstream))
 
 (defn wait-event!
-  "Makes a compute stream `hstream` wait on an event `ev`
-
-  See [cuStreamWaitEvent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
+  "Makes a compute stream `hstream` wait on an event `ev`.
+  See [CUDA Event Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+  "
   [^CUstream_st hstream ^CUevent_st ev]
   (with-check (cudart/cuStreamWaitEvent hstream ev 0) hstream))
 
 (defn attach-mem!
-  "Attach memory `mem` of size `size`, specified by `flag` to a `hstream` asynchronously.
-
-  Valid flags are: `:global`, `:host` and `:single` (the default).
-
+  "Attaches memory `mem` of size `size`, specified by `flag` to a `hstream` asynchronously.
+  For available flags, see [[internal.constants/mem-attach-flags]]. Te default is `:single`.
   If :global flag is specified, the memory can be accessed by any stream on any device.
-  If :host flag is specified, the program makes a guarantee that it won't access the memory on the device from any stream on a device that has no `concurrent-managed-access` capability.
-  If :single flag is specified and `hStream` is associated with a device that has no `concurrent-managed-access` capability, the program makes a guarantee that it will only access the memory on the device from `hStream`. It is illegal to attach singly to the nil stream, because the nil stream is a virtual global stream and not a specific stream. An error will be returned in this case.
+  If :host flag is specified, the program makes a guarantee that it won't access the memory on
+  the device from any stream on a device that has no `concurrent-managed-access` capability.
+  If :single flag is specified and `hStream` is associated with a device that has no
+  `concurrent-managed-access` capability, the program makes a guarantee that it will only access
+  the memory on the device from `hStream`. It is illegal to attach singly to the nil stream,
+  because the nil stream is a virtual global stream and not a specific stream. An error will
+  be returned in this case.
 
-  When memory is associated with a single stream, the Unified Memory system will allow CPU access to this memory
-  region so long as all operations in hStream have completed, regardless of whether other streams are active.
-  In effect, this constrains exclusive ownership of the managed memory region by an active GPU to per-stream
-  activity instead of whole-GPU activity.
+  When memory is associated with a single stream, the Unified Memory system will allow CPU access
+  to this memory region so long as all operations in hStream have completed, regardless of whether
+  other streams are active. In effect, this constrains exclusive ownership of the managed memory
+  region by an active GPU to per-stream activity instead of whole-GPU activity.
 
-  See [cuStreamAttachMemAsync](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)."
-  ([^CUstream_st hstream mem ^long size flag]
+  See [CUDA Stream Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)."
+  ([^CUstream_st hstream mem ^long byte-size flag]
    (attach-mem* (or (extract hstream)
                     (when-not (= :global flag)
                       (throw (ex-info "nil stream is a virtual global stream and not a specific stream that may be only used with :global mem-attach flag."
                                       {:flag flag :available mem-attach-flags}))))
-                (cu-address* mem) size
+                (cu-address* mem) byte-size
                 (or (mem-attach-flags flag)
                     (throw (ex-info "Unknown mem-attach flag."
                                     {:flag flag :available mem-attach-flags}))))
    hstream)
-  ([mem size flag]
-   (attach-mem! default-stream mem size flag)))
+  ([mem byte-size flag]
+   (attach-mem! default-stream mem byte-size flag)))
 
 ;; ================== Event Management =======================================
 
 (defn event
-  "Creates an event specified by keyword `flags`.
-
-  Available flags are `:default`, `:blocking-sync`, `:disable-timing`, and `:interprocess`.
-
-  See [cuEventCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+  "Creates an event specified by keyword `flags`. For available flags, see
+  [[internal.constants/event-flags]].
+  See [CUDA Event Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
   ([]
    (event* cudart/CU_EVENT_DEFAULT))
@@ -655,8 +687,7 @@
 
 (defn elapsed-time!
   "Computes the elapsed time in milliseconds between `start-event` and `end-event`.
-
-  See [cuEventElapsedTime](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+  See [CUDA Event Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
   ^double [^CUevent_st start-event ^CUevent_st end-event]
   (let [res (float-array 1)]
@@ -664,8 +695,7 @@
 
 (defn record!
   "Records an even! `ev` on optional `stream`.
-
-  See [cuEventRecord](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
+  See [CUDA Event Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
   ([^CUstream_st stream ^CUevent_st event]
    (with-check (cudart/cuEventRecord event stream) stream))
@@ -676,27 +706,23 @@
 
 (defn can-access-peer
   "Queries if a device may directly access a peer device's memory.
-
-  See [cuDeviceCanAccessPeer](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
+  See [CUDA Peer Access Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
   "
   [dev peer]
   (can-access-peer* (extract dev) (extract peer)))
 
 (defn p2p-attribute
   "Queries attributes of the link between two devices.
-
-  See [cuDeviceGetP2PAttribute](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
+  See [CUDA Peer Access Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
   "
   [dev peer attribute]
   (p2p-attribute* (extract dev) (extract peer) (or (p2p-attributes attribute)
-                               (throw (ex-info "Unknown p2p attribute."
-                                               {:attribute attribute :available p2p-attributes})))))
+                                                   (throw (ex-info "Unknown p2p attribute."
+                                                                   {:attribute attribute :available p2p-attributes})))))
 
 (defn disable-peer-access!
-  "Disables direct access to memory allocations in a peer context and unregisters
-  any registered allocations.
-
-  See [cuCtxDisablePeerAccess](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
+  "Disables direct access to memory allocations in a peer context and unregisters any registered allocations.
+  See [CUDA Peer Access Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
   "
   ([ctx]
    (with-check (cudart/cuCtxDisablePeerAccess ctx) ctx))
@@ -704,10 +730,8 @@
    (disable-peer-access! (current-context))))
 
 (defn enable-peer-access!
-  "Enables direct access to memory allocations in a peer context and unregisters
-  any registered allocations.
-
-  See [cuCtxEnablePeerAccess](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
+  "Enables direct access to memory allocations in a peer context and unregisters any registered allocations.
+  See [CUDA Peer Access Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
   "
   ([ctx]
    (with-check (cudart/cuCtxEnablePeerAccess ctx 0) ctx)
@@ -719,7 +743,8 @@
 
 (defn program
   "Creates a CUDA program from the `source-code`, with an optional `name` and an optional
-  hash map of `headers` (as strings) and their names."
+  hash map of `headers` (as strings) and their names.
+  "
   ([^String name ^String source-code headers]
    (program* (string-pointer name) (string-pointer source-code)
              (pointer-pointer (into-array String (vals headers)))

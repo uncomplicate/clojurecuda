@@ -6,7 +6,7 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(ns uncomplicate.clojurecuda.examples.jcuda.vector-add-test
+(ns uncomplicate.clojurecuda.examples.vector-add-test
   (:require [midje.sweet :refer [facts =>]]
             [uncomplicate.commons.core :refer [with-release size]]
             [uncomplicate.clojure-cpp :refer [float-pointer pointer-seq]]
@@ -17,7 +17,7 @@
 
 (init)
 
-(let [program-source (slurp "test/cuda/examples/jcuda/jnvrtc-vector-add.cu")]
+(let [program-source (slurp "test/cuda/examples/jnvrtc-vector-add.cu")]
   (with-context (context (device))
     (with-release [prog (compile! (program program-source))
                    m (module prog)

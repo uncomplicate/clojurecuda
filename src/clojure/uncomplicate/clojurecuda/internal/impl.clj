@@ -150,12 +150,7 @@
       {:file file-name} link-state)))
 
 (defn link*
-  "Invokes CUDA linker on data provided as a vector `[[type source <options> <name>], ...]`.
-  Produces a cubin compiled for particular architecture
-
-  See [cuLinkCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MODULE.html) and
-  related `likadd` functions.
-  "[^CUlinkState_st link-state data options]
+  [^CUlinkState_st link-state data options]
   (let [[opts vals] (enc-jit-options options)]
     (let-release [opts (int-pointer opts)
                   vals (pointer-pointer vals)]
@@ -217,8 +212,6 @@
    `(cu/with-check nvrtc-error ~err-code ~form)))
 
 (defn program*
-  "Creates a CUDA program with `name`, from the `source-code`, and void pointers of headers
-  and their names."
   [^BytePointer name ^BytePointer source-code
    ^PointerPointer source-headers ^PointerPointer include-names]
   (let-release [res (_nvrtcProgram.)]
@@ -272,10 +265,7 @@
       res)))
 
 (defn current-context*
-  "If `ctx` is provided, bounds it as current. Returns the CUDA context bound to the calling CPU thread.
-
-  See [cuCtxGetCurrent](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html)
-  "
+  "If `ctx` is provided, bounds it as current. Returns the CUDA context bound to the calling CPU thread."
   ([]
    (let [ctx (CUctx_st.)]
      (with-check (cudart/cuCtxGetCurrent ctx) ctx)))
@@ -325,18 +315,18 @@
     ([this dptr n]
      (if (= (int this) this)
        (with-check (cudart/cuMemsetD32 dptr (int this) (* 2 (long n))) dptr)
-       (dragan-says-ex "This long value is too big for the memset! function."
+       (dragan-says-ex "This long value is too large for the memset! function."
                        {:value this :max (int this)})))
     ([this dptr n hstream]
      (if (= (int this) this)
        (with-check (cudart/cuMemsetD32Async dptr (int this) (* 2 (long n)) hstream) dptr)
-       (dragan-says-ex "This long value is too big for the memset! function."
+       (dragan-says-ex "This long value is too large for the memset! function."
                        {:value this :max (int this)})))))
 
 (defprotocol Memcpy
   "An object that represents memory that participates in CUDA operations.
-  It can be on the device, or on the host.  Built-in implementations:
-  CUDA pointers, JavaCPP pointers, Java primitive arrays, and Buffers
+  It can be on the device, or on the host. Built-in implementations:
+  CUDA pointers, JavaCPP pointers, Java primitive arrays, etc.
   "
   (memcpy-host* [dst src size] [dst src size hstream])
   (memcpy* [dst src size] [dst src size hstream]))
@@ -401,14 +391,6 @@
       this)))
 
 (defn mem-alloc-managed*
-  "Allocates the `size` bytes of memory that will be automatically managed by the Unified Memory
-  system, specified by an integer `flag`.
-
-  Returns a [[CUDevicePtr]] object.
-  The memory is not cleared. `size` must be greater than `0`.
-
-  See [cuMemAllocManaged](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
-  "
   ([^long size ^long flag]
    (let-release [daddr (long-pointer 1)]
      (with-check (cudart/cuMemAllocManaged daddr size flag)
@@ -510,12 +492,6 @@
     (cupointer-memcpy* this src byte-count hstream)))
 
 (defn malloc-runtime*
-  "Allocates `size` bytes of device memory.
-
-  The memory is not cleared. `size` must be greater than `0`.
-
-  See [cudaMalloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
-  "
   ([^long size]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cudaMalloc p size)
@@ -631,27 +607,24 @@
     (cupointer-memcpy* this src byte-count hstream)))
 
 (defn mem-host-alloc*
-  "Allocates `size` bytes of page-locked memory, 'pinned' on the host, using raw integer `flags`.
-  For available flags, see [constants/mem-host-alloc-flags]
-
-  The memory is not cleared. `size` must be greater than `0`.
-
+  "Allocates `byte-size` bytes of page-locked memory, 'pinned' on the host, using raw integer `flags`.
+  For available flags, see [[constants/mem-host-alloc-flags]]. The memory is not initialized.
+  `byte-size` must be greater than `0`.
   See [cuMemHostAlloc](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
-  ([^long size ^long flags]
+  ([^long byte-size ^long flags]
    (let-release [p (byte-pointer nil)]
-     (with-check (cudart/cuMemHostAlloc p size flags)
-       (->CUPinnedPtr (capacity! p size) (pointer (address p)) true free-pinned))))
-  ([^long size ^long flags pointer-type]
+     (with-check (cudart/cuMemHostAlloc p byte-size flags)
+       (->CUPinnedPtr (capacity! p byte-size) (pointer (address p)) true free-pinned))))
+  ([^long byte-size ^long flags pointer-type]
    (let-release [p (byte-pointer nil)]
-     (with-check (cudart/cuMemHostAlloc p size flags)
-       (let [tp (pointer-type (capacity! p size))]
+     (with-check (cudart/cuMemHostAlloc p byte-size flags)
+       (let [tp (pointer-type (capacity! p byte-size))]
          (->CUPinnedPtr tp (pointer (address tp)) true free-pinned))))))
 
 (defn mem-host-register*
   "Registers previously allocated host `Pointer` and pins it, using raw integer `flags`.
-
-   See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
+  See [cuMemHostRegister](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
   ([hptr ^long flags]
    (with-check (cudart/cuMemHostRegister hptr (bytesize hptr) flags)
@@ -766,21 +739,19 @@
     (cupointer-memcpy* this src byte-count hstream)))
 
 (defn mem-alloc-host*
-  "Allocates `size` bytes of page-locked memory, 'mapped' to the device.
+  "Allocates `byte-size` bytes of page-locked memory, 'mapped' to the device.
   For available flags, see [constants/mem-host-alloc-flags]
-
-  The memory is not cleared. `size` must be greater than `0`.
-
+  The memory is not initialized. `byte-size` must be greater than `0`.
   See [cuMemAllocHost](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__MEM.html).
   "
-  ([^long size]
+  ([^long byte-size]
    (let-release [p (byte-pointer nil)]
-     (with-check (cudart/cuMemAllocHost p size)
-       (->CUMappedPtr (capacity! p size) (pointer (address p)) true))))
-  ([^long size pointer-type]
+     (with-check (cudart/cuMemAllocHost p byte-size)
+       (->CUMappedPtr (capacity! p byte-size) (pointer (address p)) true))))
+  ([^long byte-size pointer-type]
    (let-release [p (byte-pointer nil)]
-     (with-check (cudart/cuMemAllocHost p size)
-       (let [tp (pointer-type (capacity! p size))]
+     (with-check (cudart/cuMemAllocHost p byte-size)
+       (let [tp (pointer-type (capacity! p byte-size))]
          (->CUMappedPtr tp (pointer (address tp)) true))))))
 
 ;; =============== Host memory  =================================
@@ -828,7 +799,6 @@
 
 (defn stream*
   "Create a stream using an optional `priority` and an integer `flag`.
-
   See [cuStreamCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
   "
   ([^long flag]
@@ -840,7 +810,6 @@
 
 (defn ready*
   "Determines status (ready or not) of a compute stream or event.
-
   See [cuStreamQuery](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html),
   and [cuEventQuery](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
@@ -858,14 +827,6 @@
     (go (>! ch (->StreamCallbackInfo (get cu-result-codes status status) (extract data)))))
   (applyTo [this xs]
     (AFn/applyToHelper this xs)))
-
-(defn add-callback*
-  "Adds a [[StreamCallback]] to a compute stream, with optional `data` related to the call.
-
-  See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
-  [^CUstream_st hstream ^IFn callback ^Pointer data]
-  (let-release [callback (CUStreamCallback. callback)]
-    (with-check (cudart/cuStreamAddCallback hstream callback data 0) hstream)))
 
 (defprotocol HostFn
   (host-fn* [type ch]))
@@ -889,25 +850,22 @@
       (go (>! ch data)))))
 
 (defn add-host-fn*
-  "Adds a [[HostFn]] to a compute stream, with optional `data` related to the call.
-  See [cuStreamAddCallback](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)"
   [^CUstream_st hstream ^IFn f ^Pointer data]
   (let-release [hostfn (CUHostFn. f)]
     (with-check (cudart/cuLaunchHostFunc hstream hostfn data)
       hstream)))
 
 (defn attach-mem*
-  "Attach memory of size `size`, specified by an integer `flag` to a `hstream` asynchronously.
-
-  See [cuStreamAttachMemAsync](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)."
-  ([^CUstream_st hstream mem size flag]
-   (with-check (cudart/cuStreamAttachMemAsync hstream mem size flag) hstream)))
+  "Attach memory of `byte-size`, specified by an integer `flag` to a `hstream` asynchronously.
+  See [cuStreamAttachMemAsync](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html).
+  "
+  ([^CUstream_st hstream mem byte-size flag]
+   (with-check (cudart/cuStreamAttachMemAsync hstream mem byte-size flag) hstream)))
 
 ;; ================== Event Management =======================================
 
 (defn event*
   "Creates an event specified by integer `flags`.
-
   See [cuEventCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
   [^long flags]
@@ -918,7 +876,6 @@
 
 (defn can-access-peer*
   "queries if a device may directly access a peer device's memory.
-
   see [cudevicecanaccesspeer](http://docs.nvidia.com/cuda/cuda-driver-api/group__cuda__peer__access.html)
   "
   [^long dev ^long peer]
@@ -928,7 +885,6 @@
 
 (defn p2p-attribute*
   "Queries attributes of the link between two devices.
-
   See [cuDeviceGetP2PAttribute](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__PEER__ACCESS.html)
   "
   [^long dev ^long peer ^long attribute]

@@ -6,18 +6,18 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(ns uncomplicate.clojurecuda.examples.jcuda.dynamic-parallelism-test
+(ns uncomplicate.clojurecuda.examples.dynamic-parallelism-test
   (:require [midje.sweet :refer [facts =>]]
             [clojure.java.io :refer [file]]
             [uncomplicate.commons.core :refer [with-release]]
             [uncomplicate.clojure-cpp :refer [float-pointer pointer-seq]]
             [uncomplicate.clojurecuda.core
-             :refer [compile! context device function grid-1d init launch! link link-complete
+             :refer [compile! context device function grid-1d init launch! link link-complete!
                      mem-alloc-runtime memcpy-host! module parameters program with-context]]))
 
 (init)
 
-(let [program-source (slurp "test/cuda/examples/jcuda/dynamic-parallelism.cu")
+(let [program-source (slurp "test/cuda/examples/dynamic-parallelism.cu")
       num-parent-threads 8
       num-child-threads 8
       num-elements (* num-parent-threads num-child-threads)]
@@ -26,7 +26,7 @@
                                   ["--relocatable-device-code=true" "-default-device"])
                    linked-prog (link [[:library (file "/opt/cuda/lib64/libcudadevrt.a")]
                                       [:ptx prog]])
-                   m (module (link-complete linked-prog))
+                   m (module (link-complete! linked-prog))
                    parent (function m "parentKernel")
                    data (mem-alloc-runtime (* Float/BYTES num-elements))]
       (facts

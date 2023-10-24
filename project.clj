@@ -20,17 +20,6 @@
                  [org.uncomplicate/clojure-cpp "0.2.0-SNAPSHOT"]
                  [org.bytedeco/cuda-platform "12.1-8.9-1.5.10-SNAPSHOT"]]
 
-  :codox {:metadata {:doc/format :markdown}
-          :src-dir-uri "http://github.com/uncomplicate/clojurecuda/blob/master/"
-          :src-linenum-anchor-prefix "L"
-          :output-path "docs/codox"
-          :namespaces [uncomplicate.clojurecuda.core
-                       uncomplicate.clojurecuda.info
-                       uncomplicate.clojurecuda.toolbox
-                       uncomplicate.clojurecuda.internal.protocols
-                       uncomplicate.clojurecuda.internal.constants
-                       uncomplicate.clojurecuda.internal.utils]}
-
   :profiles {:dev {:plugins [[lein-midje "3.2.1"]
                              [lein-codox "0.10.8"]
                              [com.github.clj-kondo/lein-clj-kondo "0.2.5"]]
@@ -39,7 +28,16 @@
                                  *unchecked-math* :warn-on-boxed
                                  *print-length* 128}
                    :dependencies [[midje "1.10.9"]
+                                  [codox-theme-rdash "0.1.2"]
                                   [org.bytedeco/cuda-platform-redist "12.1-8.9-1.5.10-SNAPSHOT"]]
+                   :codox {:metadata {:doc/format :markdown}
+                           :source-uri "http://github.com/uncomplicate/clojurecuda/blob/master/{filepath}#L{line}"
+                           :output-path "docs/codox"
+                           :themes [:rdash]
+                           :namespaces [uncomplicate.clojurecuda.core
+                                        uncomplicate.clojurecuda.info
+                                        uncomplicate.clojurecuda.toolbox
+                                        uncomplicate.clojurecuda.internal.constants]}
                    :jvm-opts ^:replace ["-Djavacpp.platform=linux-x86_64"]}}
 
   :repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
