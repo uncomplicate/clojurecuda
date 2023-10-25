@@ -41,8 +41,9 @@
   not discussed in ClojureCUDA documentation.
   "
   (:require [uncomplicate.commons
-             [core :refer [with-release let-release info wrap extract bytesize sizeof size]]
+             [core :refer [with-release let-release info bytesize sizeof size]]
              [utils :refer [mask count-groups dragan-says-ex]]]
+            [uncomplicate.fluokitten.protocols :refer [extract]]
             [uncomplicate.clojure-cpp
              :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer
                      size-t-pointer pointer-pointer get-entry put-entry! safe type-pointer position!
@@ -592,7 +593,7 @@
 (def default-stream
   ^{:const true
     :doc "The default per-thread stream."}
-  (wrap cudart/CU_STREAM_PER_THREAD))
+   cudart/CU_STREAM_PER_THREAD)
 
 (defn ready?
   "Determines status (ready or not) of a compute stream or event `obj`.

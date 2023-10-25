@@ -9,9 +9,10 @@
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.internal.impl
   (:require [uncomplicate.commons
-             [core :refer [with-release let-release Releaseable release info Wrapper
-                           extract Bytes bytesize Entries size* size]]
+             [core :refer [with-release let-release Releaseable release info Bytes bytesize Entries
+                           size* size]]
              [utils :as cu :refer [dragan-says-ex]]]
+            [uncomplicate.fluokitten.protocols :refer [Comonad extract]]
             [uncomplicate.clojure-cpp :as cpp
              :refer [put-entry! pointer safe int-pointer pointer-pointer byte-pointer size-t-pointer
                      get-entry get-string null? long-pointer PointerCreator TypedPointerCreator
@@ -53,7 +54,7 @@
     (and (instance? CUDevice y) (= dev (.dev ^CUDevice y))))
   (toString [_]
     (format "#Device[:cuda, %d]" dev))
-  Wrapper
+  Comonad
   (extract [_]
     dev))
 
@@ -353,7 +354,7 @@
           (with-check (cudart/cuMemFree (get-entry daddr 0)) true))
         (release daddr))
       true))
-  Wrapper
+  Comonad
   (extract [_]
     (extract daddr))
   CUPointer
@@ -429,7 +430,7 @@
           (with-check (cudart/cudaFree dptr) (.setNull dptr)))
         (release daddr))
       true))
-  Wrapper
+  Comonad
   (extract [_]
     (get-entry daddr 0))
   CUPointer
@@ -526,7 +527,7 @@
           (release-fn hptr))
         (release haddr))
       true))
-  Wrapper
+  Comonad
   (extract [_]
     (extract hptr))
   CUPointer
@@ -651,7 +652,7 @@
             (release hptr))
           (release haddr)))
       true))
-  Wrapper
+  Comonad
   (extract [_]
     (get-entry haddr 0))
   CUPointer
