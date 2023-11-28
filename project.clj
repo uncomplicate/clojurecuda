@@ -16,9 +16,9 @@
   :dependencies [[org.clojure/clojure "1.11.1"]
                  [org.clojure/core.async "1.6.673"]
                  [uncomplicate/commons "0.14.0-SNAPSHOT"]
-                 [uncomplicate/fluokitten "0.9.1"]
+                 [uncomplicate/fluokitten "0.9.2-SNAPSHOT"]
                  [org.uncomplicate/clojure-cpp "0.2.0-SNAPSHOT"]
-                 [org.bytedeco/cuda-platform "12.1-8.9-1.5.10-SNAPSHOT"]]
+                 [org.bytedeco/cuda-platform "12.3-8.9-1.5.10-SNAPSHOT"]]
 
   :profiles {:dev {:plugins [[lein-midje "3.2.1"]
                              [lein-codox "0.10.8"]
@@ -29,7 +29,7 @@
                                  *print-length* 128}
                    :dependencies [[midje "1.10.9"]
                                   [codox-theme-rdash "0.1.2"]
-                                  [org.bytedeco/cuda-platform-redist "12.1-8.9-1.5.10-SNAPSHOT"]]
+                                  [org.bytedeco/cuda "12.3-8.9-1.5.10-SNAPSHOT" :classifier linux-x86_64-redist]]
                    :codox {:metadata {:doc/format :markdown}
                            :source-uri "http://github.com/uncomplicate/clojurecuda/blob/master/{filepath}#L{line}"
                            :output-path "docs/codox"
@@ -41,7 +41,6 @@
                    :jvm-opts ^:replace ["-Djavacpp.platform=linux-x86_64"]}}
 
   :repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
-  :javac-options ["-target" "1.8" "-source" "1.8" "-Xlint:-options"]
   :source-paths ["src/clojure" "src/cuda"]
   :test-paths ["test/clojure" "test/cuda"]
   :java-source-paths ["src/java"])
