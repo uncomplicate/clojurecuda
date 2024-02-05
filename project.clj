@@ -14,11 +14,11 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.11.1"]
-                 [org.clojure/core.async "1.6.673"]
+                 [org.clojure/core.async "1.6.681"]
                  [uncomplicate/commons "0.14.0-SNAPSHOT"]
                  [uncomplicate/fluokitten "0.9.2-SNAPSHOT"]
                  [org.uncomplicate/clojure-cpp "0.2.0-SNAPSHOT"]
-                 [org.bytedeco/cuda-platform "12.3-8.9-1.5.10-SNAPSHOT"]]
+                 [org.bytedeco/cuda-platform "12.3-8.9-1.5.10"]]
 
   :profiles {:dev {:plugins [[lein-midje "3.2.1"]
                              [lein-codox "0.10.8"]
@@ -27,9 +27,9 @@
                                  *assert* true
                                  *unchecked-math* :warn-on-boxed
                                  *print-length* 128}
-                   :dependencies [[midje "1.10.9"]
+                   :dependencies [[midje "1.10.10"]
                                   [codox-theme-rdash "0.1.2"]
-                                  [org.bytedeco/cuda "12.3-8.9-1.5.10-SNAPSHOT" :classifier linux-x86_64-redist]]
+                                  [org.bytedeco/cuda "12.3-8.9-1.5.10" :classifier linux-x86_64-redist]]
                    :codox {:metadata {:doc/format :markdown}
                            :source-uri "http://github.com/uncomplicate/clojurecuda/blob/master/{filepath}#L{line}"
                            :output-path "docs/codox"
@@ -40,7 +40,7 @@
                                         uncomplicate.clojurecuda.internal.constants]}
                    :jvm-opts ^:replace ["-Djavacpp.platform=linux-x86_64"]}}
 
-  :repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
+  ;;:repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
   :source-paths ["src/clojure" "src/cuda"]
   :test-paths ["test/clojure" "test/cuda"]
   :java-source-paths ["src/java"])
