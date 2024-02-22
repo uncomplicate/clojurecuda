@@ -11,8 +11,8 @@ ClojureCUDA uses native Nvidia GPU drivers, and CUDA toolkit, so it is very impo
 * Familiarize yourself with ClojureCUDA's [more detailed tutorials](/articles/guides.html) and [API documentation](/codox).
 
 ## Minimum requirements
-* Java 8
-* CUDA Toolkit 11.0+ (the CUDA version on your system has to match the one specified project.clj. Prefer 11.6)
+* Java 8 (but the newer the better).
+* CUDA Drivers
 * Linux or Windows. macOS doesn't allow CUDA from version 11 and up. You can only use an old release of ClojureCUDA on macOS.
 
 ## Usage
@@ -78,7 +78,9 @@ If you need higher-level high performance functionality, such as matrix computat
 
 ## Installation
 
-### Install CUDA Toolkit
+### Install CUDA Toolkit (LEGACY)
+
+** This is only required for old ClojureCUDA versions (0.17.0 and older). For 0.18.0 and up, you only need to have recent Nvidia GPU drivers installed on your system.**
 
 To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU drivers. If you need to create your own CUDA kernels (you most probably do), you also need CUDA Toolkit. You can download both the drivers and the toolkit as one bundle from [Nvidia's CUDA Toolkit page](https://developer.nvidia.com/cuda-toolkit). *Please note that ClojureCUDA requires a minimal CUDA version, which is currently `11.0`, and prefers the latest CUDA (currently `11.4`) so make sure that you have recently updated your drivers and the toolkit.* If you use older drivers, some things might work, but some might not.
 
@@ -88,10 +90,9 @@ The most straightforward way to include ClojureCUDA in your project is with Lein
 
 ![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
 
-If you use the latest CUDA (as of this writing, `11.6`) that's all. If you must use CUDA `10.2`, or `9.2`, add an explicit
-dependency to `org.jcuda/jcuda` `10.0`, or `0.9.2` to your project(s), or use an earlier version of ClojureCUDA. ClojuerCUDA might work with an earlier (matching) version of CUDA/JCuda, but it is not guaranteed.
+If you use the latest CUDA (as of this writing, `12.3`) that's all.
 
-ClojureCUDA currently works out of the box on Linux, Windows, and OS X. For other plaforms, contact us.
+ClojureCUDA currently works out of the box on Linux and Windows, while Nvidia does not support macOS. For other plaforms, contact us.
 
 ## Where to go next
 
