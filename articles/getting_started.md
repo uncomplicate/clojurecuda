@@ -24,7 +24,7 @@ The most straightforward way to include ClojureCUDA in your project is with Lein
 * Add the following dependency to your `project.clj`:![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
 * Add the appropriate JavaCPP CUDA distribution jar, such as `[org.bytedeco/cuda "12.3-8.9-1.5.10" :classifier linux-x86_64-redist]`
 
-If you use the latest CUDA (as of this writing, `12.3`) that's all. Please not that JavaCPP CUDA is *VERY LARGE*, so the download will take time
+If you use the latest CUDA (as of this writing, `12.3`) that's all. Please not that JavaCPP CUDA is *VERY LARGE (2 GB)*, so the download will take time
 the first time you're doing it. If you do this from an IDE, you would not even know why your REPL is not up yet, and may kill the process. This
 will leave the JavaCPP CUDA jar broken. So, the first time you're using this dependency, I advise you to open the terminal (command prompt on Windows)
 and type `lein deps`. You'll see the progress and can patiently wait a minute or two until it's ready. The next time, your REPL will start instantly,
