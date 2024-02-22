@@ -34,7 +34,7 @@ ClojureCUDA currently works out of the box on Linux and Windows, while Nvidia do
 
 ### Install CUDA Toolkit (LEGACY)
 
-** This is only required for old ClojureCUDA versions (0.17.0 and older). For 0.18.0 and up, you only need to have recent Nvidia GPU drivers installed on your system.**
+**This is only required for old ClojureCUDA versions (0.17.0 and older). For 0.18.0 and up, you only need to have recent Nvidia GPU drivers installed on your system.**
 
 To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU drivers. If you need to create your own CUDA kernels (you most probably do), you also need CUDA Toolkit. You can download both the drivers and the toolkit as one bundle from [Nvidia's CUDA Toolkit page](https://developer.nvidia.com/cuda-toolkit). *Please note that ClojureCUDA requires a minimal CUDA version, which is currently `11.0`, and prefers the latest CUDA (currently `11.4`) so make sure that you have recently updated your drivers and the toolkit.* If you use older drivers, some things might work, but some might not.
 
