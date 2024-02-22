@@ -22,7 +22,7 @@ ClojureCUDA uses native Nvidia GPU drivers, and CUDA toolkit, so it is very impo
 The most straightforward way to include ClojureCUDA in your project is with Leiningen.
 
 * Add the following dependency to your `project.clj`:![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
-* Add the appropriate JavaCPP CUDA distribution jar, such as [org.bytedeco/cuda "12.3-8.9-1.5.10" :classifier linux-x86_64-redist]
+* Add the appropriate JavaCPP CUDA distribution jar, such as `[org.bytedeco/cuda "12.3-8.9-1.5.10" :classifier linux-x86_64-redist]`
 
 If you use the latest CUDA (as of this writing, `12.3`) that's all. Please not that JavaCPP CUDA is *VERY LARGE*, so the download will take time
 the first time you're doing it. If you do this from an IDE, you would not even know why your REPL is not up yet, and may kill the process. This
