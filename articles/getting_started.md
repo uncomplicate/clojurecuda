@@ -15,6 +15,30 @@ ClojureCUDA uses native Nvidia GPU drivers, and CUDA toolkit, so it is very impo
 * CUDA Drivers
 * Linux or Windows. macOS doesn't allow CUDA from version 11 and up. You can only use an old release of ClojureCUDA on macOS.
 
+## Installation
+
+### Include the ClojureCUDA jar
+
+The most straightforward way to include ClojureCUDA in your project is with Leiningen.
+
+* Add the following dependency to your `project.clj`:![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
+* Add the appropriate JavaCPP CUDA distribution jar, such as [org.bytedeco/cuda "12.3-8.9-1.5.10" :classifier linux-x86_64-redist]
+
+If you use the latest CUDA (as of this writing, `12.3`) that's all. Please not that JavaCPP CUDA is *VERY LARGE*, so the download will take time
+the first time you're doing it. If you do this from an IDE, you would not even know why your REPL is not up yet, and may kill the process. This
+will leave the JavaCPP CUDA jar broken. So, the first time you're using this dependency, I advise you to open the terminal (command prompt on Windows)
+and type `lein deps`. You'll see the progress and can patiently wait a minute or two until it's ready. The next time, your REPL will start instantly,
+because everything will be cached in your local Maven repository (`<home>/.m2`). If you already messed it up, do not worry. Just go to `<home>/.m2/repository/org/bytedeco` and delete all folders that mention cuda.
+
+ClojureCUDA currently works out of the box on Linux and Windows, while Nvidia does not support macOS. For other plaforms, contact us.
+
+### Install CUDA Toolkit (LEGACY)
+
+** This is only required for old ClojureCUDA versions (0.17.0 and older). For 0.18.0 and up, you only need to have recent Nvidia GPU drivers installed on your system.**
+
+To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU drivers. If you need to create your own CUDA kernels (you most probably do), you also need CUDA Toolkit. You can download both the drivers and the toolkit as one bundle from [Nvidia's CUDA Toolkit page](https://developer.nvidia.com/cuda-toolkit). *Please note that ClojureCUDA requires a minimal CUDA version, which is currently `11.0`, and prefers the latest CUDA (currently `11.4`) so make sure that you have recently updated your drivers and the toolkit.* If you use older drivers, some things might work, but some might not.
+
+
 ## Usage
 
 First `use` or `require` `uncomplicate.clojurecuda.core` and/or `uncomplicate.commons.core` and/or `uncomplicate.clojurecuda.info` in your namespace, and you'll be able to call appropriate functions from the ClojureCUDA library.
@@ -76,23 +100,6 @@ ClojureCUDA is a Clojure library for High Performance Computing with CUDA, which
 
 If you need higher-level high performance functionality, such as matrix computations, try [Neanderthal](https://neanderthal.uncomplicate.org).
 
-## Installation
-
-### Install CUDA Toolkit (LEGACY)
-
-** This is only required for old ClojureCUDA versions (0.17.0 and older). For 0.18.0 and up, you only need to have recent Nvidia GPU drivers installed on your system.**
-
-To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU drivers. If you need to create your own CUDA kernels (you most probably do), you also need CUDA Toolkit. You can download both the drivers and the toolkit as one bundle from [Nvidia's CUDA Toolkit page](https://developer.nvidia.com/cuda-toolkit). *Please note that ClojureCUDA requires a minimal CUDA version, which is currently `11.0`, and prefers the latest CUDA (currently `11.4`) so make sure that you have recently updated your drivers and the toolkit.* If you use older drivers, some things might work, but some might not.
-
-### Add ClojureCUDA jar
-
-The most straightforward way to include ClojureCUDA in your project is with Leiningen. Add the following dependency to your `project.clj`:
-
-![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
-
-If you use the latest CUDA (as of this writing, `12.3`) that's all.
-
-ClojureCUDA currently works out of the box on Linux and Windows, while Nvidia does not support macOS. For other plaforms, contact us.
 
 ## Where to go next
 
