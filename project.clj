@@ -6,18 +6,18 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(defproject uncomplicate/clojurecuda "0.18.0"
+(defproject uncomplicate/clojurecuda "0.19.0"
   :description "ClojureCUDA is a Clojure library for parallel computations with Nvidia's CUDA."
   :url "https://github.com/uncomplicate/clojurecuda"
   :scm {:name "git"
         :url "https://github.com/uncomplicate/clojurecuda"}
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.11.1"]
+  :dependencies [[org.clojure/clojure "1.11.3"]
                  [org.clojure/core.async "1.6.681"]
-                 [uncomplicate/commons "0.14.0"]
-                 [uncomplicate/fluokitten "0.9.2"]
-                 [org.uncomplicate/clojure-cpp "0.2.0"]
+                 [uncomplicate/commons "0.15.0"]
+                 [uncomplicate/fluokitten "0.10.0"]
+                 [org.uncomplicate/clojure-cpp "0.3.0"]
                  [org.bytedeco/cuda-platform "12.3-8.9-1.5.10"]]
 
   :profiles {:dev {:plugins [[lein-midje "3.2.1"]
@@ -41,6 +41,9 @@
                    :jvm-opts ^:replace ["-Djavacpp.platform=linux-x86_64"]}}
 
   ;;:repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
+
+  :javac-options ["-target" "1.8" "-source" "1.8" "-Xlint:-options"]
+
   :source-paths ["src/clojure" "src/cuda"]
   :test-paths ["test/clojure" "test/cuda"]
   :java-source-paths ["src/java"])
