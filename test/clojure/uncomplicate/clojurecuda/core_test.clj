@@ -134,7 +134,7 @@
      (release strm) => true
      (release strm) => true
      (release cuda) => true
-     (memcpy! cuda cuda) => (throws NullPointerException)
+     (memcpy! cuda cuda) => (throws IllegalArgumentException)
      (release cuda) => true)))
 
 (with-context (context (device 0) :map-host)
@@ -267,18 +267,28 @@
        (cuda-free! cuda1) => cuda1))
 
     (facts
-     "memset tests."
-     (with-release [pinned-host (mem-alloc-pinned (* 2 Integer/BYTES))
-                    cuda1 (mem-alloc-runtime (* 2 Integer/BYTES))]
-       (put-int! (pointer pinned-host) 0 24)
-       (put-int! (pointer pinned-host) 1 34)
-       (memcpy-host! pinned-host cuda1) => cuda1
-       (pointer-seq (memcpy-host! cuda1 (int-pointer 2))) => [24 34]
-       (memcpy-host! (memset! cuda1 (int 0) 1) pinned-host) => pinned-host
-       (pointer-seq (int-pointer pinned-host)) => [0 34]
-       (memcpy-host! (memset! cuda1 (int 0)) pinned-host) => pinned-host
-       (synchronize!)
-       (pointer-seq (int-pointer pinned-host)) => [0 0]))
+      "cuda-malloc memset tests."
+      (with-release [cuda1 (cuda-malloc (* 2 Integer/BYTES) :int)]
+        (memcpy-to-device! (int-pointer [124 134]) cuda1) => cuda1
+        (pointer-seq (memcpy-to-host! cuda1 (int-pointer 2))) => [124 134]
+        (position! (pointer cuda1) 1)
+        (memset! cuda1 (int 100) 1)
+        (position! (pointer cuda1) 0)
+        (pointer-seq (memcpy-to-host! cuda1 (int-pointer 2))) => [124 100]
+        (memset! cuda1 (int 200) 1)
+        (pointer-seq (memcpy-to-host! cuda1 (int-pointer 2))) => [200 100]))
+
+    (facts
+      "cuda-alloc-runtime memset tests."
+      (with-release [cuda1 (mem-alloc-runtime (* 2 Integer/BYTES) :int)]
+        (memcpy-host! (int-pointer [124 134]) cuda1) => cuda1
+        (pointer-seq (memcpy-host! cuda1 (int-pointer 2))) => [124 134]
+        (position! (pointer cuda1) 1)
+        (memset! cuda1 (int 100) 1)
+        (position! (pointer cuda1) 0)
+        (pointer-seq (memcpy-host! cuda1 (int-pointer 2))) => [124 100]
+        (memset! cuda1 (int 200) 1)
+        (pointer-seq (memcpy-host! cuda1 (int-pointer 2))) => [200 100]))
 
     (when (and (info/managed-memory dev) (info/concurrent-managed-access dev))
       (facts

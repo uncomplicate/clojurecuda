@@ -310,19 +310,29 @@
     ([this dptr n hstream]
      (with-check (cudart/cuMemsetD32Async dptr (Float/floatToIntBits this) n hstream) dptr))))
 
+(extend-type Double
+  MemSet
+  (memset*
+    ([this dptr n]
+     (if (= 0.0 this)
+       (with-check (cudart/cuMemsetD32 dptr (int 0) (* 2 (long n))) dptr)
+       (dragan-says-ex "Only zeroes are suported in double memset! function." {:value this})))
+    ([this dptr n hstream]
+     (if (= 0.0 this)
+       (with-check (cudart/cuMemsetD32Async dptr (int 0) (* 2 (long n)) hstream) dptr)
+       (dragan-says-ex "Only zeroes are suported in double memset! function." {:value this})))))
+
 (extend-type Long
   MemSet
   (memset*
     ([this dptr n]
-     (if (= (int this) this)
-       (with-check (cudart/cuMemsetD32 dptr (int this) (* 2 (long n))) dptr)
-       (dragan-says-ex "This long value is too large for the memset! function."
-                       {:value this :max (int this)})))
+     (if (= 0 this)
+       (with-check (cudart/cuMemsetD32 dptr (int 0) (* 2 (long n))) dptr)
+       (dragan-says-ex "Only zeroes are suported in long memset! function." {:value this})))
     ([this dptr n hstream]
-     (if (= (int this) this)
-       (with-check (cudart/cuMemsetD32Async dptr (int this) (* 2 (long n)) hstream) dptr)
-       (dragan-says-ex "This long value is too large for the memset! function."
-                       {:value this :max (int this)})))))
+     (if (= 0 this)
+       (with-check (cudart/cuMemsetD32Async dptr (int 0) (* 2 (long n)) hstream) dptr)
+       (dragan-says-ex "Only zeroes are suported in long memset! function." {:value this})))))
 
 (defprotocol Memcpy
   "An object that represents memory that participates in CUDA operations.
@@ -414,7 +424,10 @@
        (cudart/cuMemcpyAsync (cu-address* dst) (cu-address* src) byte-count hstream))
      dst)))
 
-(deftype CURuntimePtr [^Pointer dptr ^LongPointer daddr master]
+(defn offset-address [^Pointer p]
+  (+ (.address (safe p)) (* (.sizeof p) (.position p))))
+
+(deftype CURuntimePtr [^Pointer dptr master]
   Object
   (hashCode [_]
     (hash dptr))
@@ -427,15 +440,14 @@
     (locking dptr
       (when-not (null? dptr)
         (when master
-          (with-check (cudart/cudaFree (.position dptr 0)) (.setNull dptr)))
-        (release daddr))
+          (with-check (cudart/cudaFree (.position dptr 0)) (.setNull dptr))))
       true))
   Comonad
   (extract [_]
-    (+ (get-entry daddr 0) (* (.sizeof dptr) (.position dptr))))
+    (offset-address dptr))
   CUPointer
   (cu-address* [_]
-    (+ (get-entry daddr 0) (* (.sizeof dptr) (.position dptr))))
+    (offset-address dptr))
   (device? [_]
     true)
   PointerCreator
@@ -476,16 +488,16 @@
   (seq [_]
     (pointer-seq dptr))
   Parameter
-  (set-parameter* [_ pp i]
-    (put-entry! pp i daddr))
+  (set-parameter* [this pp i]
+    (put-entry! pp i (pointer (offset-address dptr))))
   Memcpy
   (memcpy-host* [this src byte-count]
     (with-check
-      (cudart/cuMemcpyHtoD (cu-address* this) (safe (pointer src)) byte-count)
+      (cudart/cuMemcpyHtoD (offset-address dptr) (safe (pointer src)) byte-count)
       this))
   (memcpy-host* [this src byte-count hstream]
     (with-check
-      (cudart/cuMemcpyHtoDAsync (cu-address* this) (safe (pointer src)) byte-count hstream)
+      (cudart/cuMemcpyHtoDAsync (offset-address dptr) (safe (pointer src)) byte-count hstream)
       this))
   (memcpy* [this src byte-count]
     (cupointer-memcpy* this src byte-count))
@@ -496,12 +508,11 @@
   ([^long size]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cudaMalloc p size)
-       (->CURuntimePtr (capacity! p size) (pointer (address p)) true))))
+       (->CURuntimePtr (capacity! p size) true))))
   ([^long size pointer-type]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cudaMalloc p size)
-       (let [tp (pointer-type (capacity! p size))]
-         (->CURuntimePtr tp (pointer (address tp)) true))))))
+       (->CURuntimePtr (pointer-type (capacity! p size)) true)))))
 
 ;; =================== Pinned Memory ================================================
 
@@ -511,28 +522,27 @@
 (defn unregister-pinned [hp]
   (with-check (cudart/cuMemHostUnregister hp) hp))
 
-(deftype CUPinnedPtr [^Pointer hptr ^LongPointer haddr master release-fn]
+(deftype CUPinnedPtr [^Pointer hptr master release-fn]
   Object
   (hashCode [_]
     (hash hptr))
   (equals [this y]
-    (and (instance? CUPinnedPtr y) (= (cu-address* this) (cu-address* y))))
+    (and (instance? CUPinnedPtr y) (= (offset-address hptr) (cu-address* y))))
   (toString [this]
-    (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (cu-address* this) (bytesize hptr)))
+    (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (offset-address hptr) (bytesize hptr)))
   Releaseable
   (release [_]
     (locking hptr
       (when-not (null? hptr)
         (when master
-          (release-fn (.position hptr 0)))
-        (release haddr))
+          (release-fn (.position hptr 0))))
       true))
   Comonad
   (extract [_]
     (extract hptr))
   CUPointer
   (cu-address* [_]
-    (+ (get-entry haddr 0) (* (.sizeof hptr) (.position hptr))))
+    (offset-address hptr))
   (device? [_]
     false)
   PointerCreator
@@ -596,12 +606,12 @@
     (put! hptr obj offset length))
   Parameter
   (set-parameter* [_ pp i]
-    (put-entry! pp i haddr))
+    (put-entry! pp i (pointer (offset-address hptr))))
   Memcpy
   (memcpy-host* [this src byte-count]
-    (with-check (cudart/cuMemcpyDtoH hptr (cu-address* src) byte-count) this))
+    (with-check (cudart/cuMemcpyDtoH hptr (offset-address hptr) byte-count) this))
   (memcpy-host* [this src byte-count hstream]
-    (with-check (cudart/cuMemcpyDtoHAsync hptr (cu-address* src) byte-count hstream) this))
+    (with-check (cudart/cuMemcpyDtoHAsync hptr (offset-address hptr) byte-count hstream) this))
   (memcpy* [this src byte-count]
     (cupointer-memcpy* this src byte-count))
   (memcpy* [this src byte-count hstream]
@@ -616,12 +626,11 @@
   ([^long byte-size ^long flags]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cuMemHostAlloc p byte-size flags)
-       (->CUPinnedPtr (capacity! p byte-size) (pointer (address p)) true free-pinned))))
+       (->CUPinnedPtr (capacity! p byte-size) true free-pinned))))
   ([^long byte-size ^long flags pointer-type]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cuMemHostAlloc p byte-size flags)
-       (let [tp (pointer-type (capacity! p byte-size))]
-         (->CUPinnedPtr tp (pointer (address tp)) true free-pinned))))))
+       (->CUPinnedPtr (pointer-type (capacity! p byte-size)) true free-pinned)))))
 
 (defn mem-host-register*
   "Registers previously allocated host `Pointer` and pins it, using raw integer `flags`.
@@ -629,13 +638,13 @@
   "
   ([hptr ^long flags]
    (with-check (cudart/cuMemHostRegister hptr (bytesize hptr) flags)
-     (->CUPinnedPtr hptr (pointer (address hptr)) true unregister-pinned)))
+     (->CUPinnedPtr hptr true unregister-pinned)))
   ([hptr ^long flags pointer-type]
    (with-check (cudart/cuMemHostRegister hptr (bytesize hptr) flags)
      (let [tp (pointer-type (capacity! hptr size))]
-       (->CUPinnedPtr tp (pointer (address tp)) true unregister-pinned)))))
+       (->CUPinnedPtr tp true unregister-pinned)))))
 
-(deftype CUMappedPtr [^Pointer hptr ^LongPointer haddr master]
+(deftype CUMappedPtr [^Pointer hptr master]
   Object
   (hashCode [_]
     (hash hptr))
@@ -649,15 +658,14 @@
       (when-not (null? hptr)
         (when master
           (with-check (cudart/cuMemFreeHost (.position hptr 0))
-            (release hptr))
-          (release haddr)))
+            (release hptr))))
       true))
   Comonad
   (extract [_]
-    (+ (get-entry haddr 0) (* (.sizeof hptr) (.position hptr))))
+    (offset-address hptr))
   CUPointer
   (cu-address* [_]
-    (+ (get-entry haddr 0) (* (.sizeof hptr) (.position hptr))))
+    (offset-address hptr))
   (device? [_]
     false)
   PointerCreator
@@ -721,18 +729,18 @@
     (put! hptr obj offset length))
   Parameter
   (set-parameter* [_ pp i]
-    (put-entry! pp i haddr))
+    (put-entry! pp i (pointer (offset-address hptr))))
   Memcpy
   (memcpy-host* [this src byte-count]
     (if (device? src)
-      (with-check (cudart/cuMemcpy (cu-address* this) (cu-address* src) byte-count) this)
+      (with-check (cudart/cuMemcpy (offset-address hptr) (cu-address* src) byte-count) this)
       (cpp/memcpy! (safe (pointer src)) (extract hptr)))
     this)
   (memcpy-host* [this src byte-count hstream]
     (with-check
       (if (device? src)
-        (cudart/cuMemcpyAsync (cu-address* this) (cu-address* src) byte-count hstream)
-        (cudart/cuMemcpyHtoDAsync (cu-address* this) (safe (pointer src)) byte-count hstream))
+        (cudart/cuMemcpyAsync (offset-address hptr) (cu-address* src) byte-count hstream)
+        (cudart/cuMemcpyHtoDAsync (offset-address hptr) (safe (pointer src)) byte-count hstream))
       this))
   (memcpy* [this src byte-count]
     (cupointer-memcpy* this src byte-count))
@@ -748,24 +756,23 @@
   ([^long byte-size]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cuMemAllocHost p byte-size)
-       (->CUMappedPtr (capacity! p byte-size) (pointer (address p)) true))))
+       (->CUMappedPtr (capacity! p byte-size) true))))
   ([^long byte-size pointer-type]
    (let-release [p (byte-pointer nil)]
      (with-check (cudart/cuMemAllocHost p byte-size)
-       (let [tp (pointer-type (capacity! p byte-size))]
-         (->CUMappedPtr tp (pointer (address tp)) true))))))
+       (->CUMappedPtr (pointer-type (capacity! p byte-size)) true)))))
 
 ;; =============== Host memory  =================================
 
 (extend-type Pointer
   CUPointer
   (cu-address* [this]
-    (address this))
+    (offset-address this))
   (device? [_]
     false)
   Parameter
   (set-parameter* [parameter pp i]
-    (put-entry! pp i (pointer (address parameter))))
+    (put-entry! pp i (pointer (offset-address parameter))))
   Memcpy
   (memcpy-host*
     ([this src byte-count]
@@ -786,14 +793,14 @@
      (with-check
        (if (instance? Pointer src)
          (cudart/cudaMemcpy (extract this) (safe (pointer src)) byte-count cudart/cudaMemcpyDefault)
-         (cudart/cuMemcpy (address (extract this)) (cu-address* src) byte-count))
+         (cudart/cuMemcpy (offset-address (extract this)) (cu-address* src) byte-count))
        this))
     ([this src byte-count hstream]
      (with-check
        (if (instance? Pointer src)
          (cudart/cudaMemcpyAsync (extract this) (safe (pointer src))
                                  byte-count cudart/cudaMemcpyDefault hstream)
-         (cudart/cuMemcpyAsync (address (extract this)) (cu-address* src) byte-count hstream))
+         (cudart/cuMemcpyAsync (offset-address (extract this)) (cu-address* src) byte-count hstream))
        this))))
 
 ;; ================== Stream Management ======================================
