@@ -343,7 +343,7 @@
   (hashCode [_]
     (hash-combine (hash daddr) byte-size))
   (equals [_ y]
-    (and (instance? CUDevicePtr y) (= (get-entry daddr 0) (get-entry (.-daddr ^CUDevicePtr y) 0))))
+    (and (instance? CUDevicePtr y) (= (get-entry daddr 0) (cu-address* y))))
   (toString [_]
     (format "#DevicePtr[:cuda, 0x%x, %d bytes]" (get-entry daddr 0) byte-size))
   Releaseable
@@ -420,22 +420,22 @@
     (hash dptr))
   (equals [_ y]
     (and (instance? CURuntimePtr y) (= dptr (.-dptr ^CURuntimePtr y) 0)))
-  (toString [_]
-    (format "#RuntimePtr[:cuda, 0x%x, %d bytes]" (get-entry daddr 0) (bytesize dptr)))
+  (toString [this]
+    (format "#RuntimePtr[:cuda, 0x%x, %d bytes]" (cu-address* this) (bytesize dptr)))
   Releaseable
   (release [_]
     (locking dptr
       (when-not (null? dptr)
         (when master
-          (with-check (cudart/cudaFree dptr) (.setNull dptr)))
+          (with-check (cudart/cudaFree (.position dptr 0)) (.setNull dptr)))
         (release daddr))
       true))
   Comonad
   (extract [_]
-    (get-entry daddr 0))
+    (+ (get-entry daddr 0) (* (.sizeof dptr) (.position dptr))))
   CUPointer
   (cu-address* [_]
-    (get-entry daddr 0))
+    (+ (get-entry daddr 0) (* (.sizeof dptr) (.position dptr))))
   (device? [_]
     true)
   PointerCreator
@@ -481,11 +481,11 @@
   Memcpy
   (memcpy-host* [this src byte-count]
     (with-check
-      (cudart/cuMemcpyHtoD (get-entry daddr 0) (safe (pointer src)) byte-count)
+      (cudart/cuMemcpyHtoD (cu-address* this) (safe (pointer src)) byte-count)
       this))
   (memcpy-host* [this src byte-count hstream]
     (with-check
-      (cudart/cuMemcpyHtoDAsync (get-entry daddr 0) (safe (pointer src)) byte-count hstream)
+      (cudart/cuMemcpyHtoDAsync (cu-address* this) (safe (pointer src)) byte-count hstream)
       this))
   (memcpy* [this src byte-count]
     (cupointer-memcpy* this src byte-count))
@@ -515,16 +515,16 @@
   Object
   (hashCode [_]
     (hash hptr))
-  (equals [_ y]
-    (and (instance? CUPinnedPtr y) (= (get-entry haddr 0) (get-entry (.-haddr ^CUPinnedPtr y) 0))))
-  (toString [_]
-    (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
+  (equals [this y]
+    (and (instance? CUPinnedPtr y) (= (cu-address* this) (cu-address* y))))
+  (toString [this]
+    (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (cu-address* this) (bytesize hptr)))
   Releaseable
   (release [_]
     (locking hptr
       (when-not (null? hptr)
         (when master
-          (release-fn hptr))
+          (release-fn (.position hptr 0)))
         (release haddr))
       true))
   Comonad
@@ -532,7 +532,7 @@
     (extract hptr))
   CUPointer
   (cu-address* [_]
-    (get-entry haddr 0))
+    (+ (get-entry haddr 0) (* (.sizeof hptr) (.position hptr))))
   (device? [_]
     false)
   PointerCreator
@@ -639,25 +639,25 @@
   Object
   (hashCode [_]
     (hash hptr))
-  (equals [_ y]
-    (and (instance? CUMappedPtr y) (= (get-entry haddr 0) (get-entry (.-haddr ^CUMappedPtr y) 0))))
-  (toString [_]
-    (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (get-entry haddr 0) (bytesize hptr)))
+  (equals [this y]
+    (and (instance? CUMappedPtr y) (= (cu-address* this) (cu-address* y))))
+  (toString [this]
+    (format "#PinnedPtr[:cuda, 0x%x, %d bytes]" (cu-address* this) (bytesize hptr)))
   Releaseable
   (release [_]
     (locking hptr
       (when-not (null? hptr)
         (when master
-          (with-check (cudart/cuMemFreeHost hptr)
+          (with-check (cudart/cuMemFreeHost (.position hptr 0))
             (release hptr))
           (release haddr)))
       true))
   Comonad
   (extract [_]
-    (get-entry haddr 0))
+    (+ (get-entry haddr 0) (* (.sizeof hptr) (.position hptr))))
   CUPointer
   (cu-address* [_]
-    (get-entry haddr 0))
+    (+ (get-entry haddr 0) (* (.sizeof hptr) (.position hptr))))
   (device? [_]
     false)
   PointerCreator
@@ -725,14 +725,14 @@
   Memcpy
   (memcpy-host* [this src byte-count]
     (if (device? src)
-      (with-check (cudart/cuMemcpy (get-entry haddr 0) (cu-address* src) byte-count) this)
+      (with-check (cudart/cuMemcpy (cu-address* this) (cu-address* src) byte-count) this)
       (cpp/memcpy! (safe (pointer src)) (extract hptr)))
     this)
   (memcpy-host* [this src byte-count hstream]
     (with-check
       (if (device? src)
-        (cudart/cuMemcpyAsync (get-entry haddr 0) (cu-address* src) byte-count hstream)
-        (cudart/cuMemcpyHtoDAsync (get-entry haddr 0) (safe (pointer src)) byte-count hstream))
+        (cudart/cuMemcpyAsync (cu-address* this) (cu-address* src) byte-count hstream)
+        (cudart/cuMemcpyHtoDAsync (cu-address* this) (safe (pointer src)) byte-count hstream))
       this))
   (memcpy* [this src byte-count]
     (cupointer-memcpy* this src byte-count))

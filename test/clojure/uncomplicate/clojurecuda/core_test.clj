@@ -12,7 +12,7 @@
             [uncomplicate.commons.core :refer [release with-release size bytesize let-release]]
             [uncomplicate.clojure-cpp :as cpp
              :refer [pointer float-pointer byte-pointer get-entry get-float put-float! int-pointer
-                     long-pointer put-int! pointer-seq put-entry! fill! ptr]]
+                     long-pointer put-int! pointer-seq put-entry! fill! ptr address position!]]
             [uncomplicate.clojurecuda
              [core :refer :all]
              [info :as info :refer [pci-bus-id-string]]]
@@ -64,7 +64,10 @@
                   params (parameters cnt gpu-a)]
      (size params) => 2
      (get-entry (int-pointer (get-entry params 0))) => 3
-     (get-entry (long-pointer (get-entry params 1))) => (cu-address* gpu-a))))
+     (get-entry (long-pointer (get-entry params 1))) => (cu-address* gpu-a)
+     (address (pointer gpu-a)) => (cu-address* gpu-a)
+     (address (pointer gpu-a 1)) => (inc (cu-address* gpu-a))
+     (address (position! (pointer gpu-a) 1)) => (cu-address* gpu-a))))
 
 (let [program-source (slurp "test/cuda/uncomplicate/clojurecuda/kernels/test.cu")
       cnt 300
@@ -190,6 +193,7 @@
     (facts
      "Runtime cudaMalloc tests."
      (with-release [cuda1 (mem-alloc-runtime Float/BYTES :float)
+                    cuda2 (mem-alloc-runtime (* 3 Float/BYTES) :float)
                     host1 (float-pointer [100.0])
                     host2 (mem-alloc-mapped Float/BYTES :float)
                     zero (mem-alloc-runtime 0)]
@@ -198,7 +202,13 @@
        (memcpy-host! host1 cuda1) => cuda1
        (synchronize!)
        (pointer-seq (memcpy-host! cuda1 (float-pointer 1))) => [100.0]
-       (seq (memcpy! cuda1 host2)) => [100.0]))
+       (seq (memcpy! cuda1 host2)) => [100.0]
+       (position! (pointer cuda2) 2)
+       (.position (pointer cuda2)) => 2
+       (memcpy! cuda1 cuda2) => cuda2
+       (position! (pointer cuda2) 0)
+       (memcpy-host! (float-pointer [200.0 300.0]) cuda2) => cuda2
+       (pointer-seq (memcpy-host! cuda2 (float-pointer 3))) => [200.0 300.0 100.0]))
 
     (facts
      "Pinned memory tests."
@@ -268,7 +278,7 @@
        (pointer-seq (int-pointer pinned-host)) => [0 34]
        (memcpy-host! (memset! cuda1 (int 0)) pinned-host) => pinned-host
        (synchronize!)
-       (pointer-seq (int-pointer pinned-host)) => [0 0]) )
+       (pointer-seq (int-pointer pinned-host)) => [0 0]))
 
     (when (and (info/managed-memory dev) (info/concurrent-managed-access dev))
       (facts
