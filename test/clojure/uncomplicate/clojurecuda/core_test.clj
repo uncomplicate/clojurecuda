@@ -66,7 +66,7 @@
      (get-entry (int-pointer (get-entry params 0))) => 3
      (get-entry (long-pointer (get-entry params 1))) => (cu-address* gpu-a)
      (address (pointer gpu-a)) => (cu-address* gpu-a)
-     (address (pointer gpu-a 1)) => (inc (cu-address* gpu-a))
+     (address (pointer gpu-a 1)) => (inc (long (cu-address* gpu-a)))
      (address (position! (pointer gpu-a) 1)) => (cu-address* gpu-a))))
 
 (let [program-source (slurp "test/cuda/uncomplicate/clojurecuda/kernels/test.cu")

@@ -15,7 +15,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.0"]
                  [org.clojure/core.async "1.7.701"]
-                 [uncomplicate/commons "0.15.1"]
+                 [uncomplicate/commons "0.16.1"]
                  [uncomplicate/fluokitten "0.10.0"]
                  [org.uncomplicate/clojure-cpp "0.4.0"]
                  [org.bytedeco/cuda-platform "12.6-9.5-1.5.11"]]
