@@ -6,7 +6,7 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(defproject uncomplicate/clojurecuda "0.21.0"
+(defproject uncomplicate/clojurecuda "0.21.1-SNAPSHOT"
   :description "ClojureCUDA is a Clojure library for parallel computations with Nvidia's CUDA."
   :url "https://github.com/uncomplicate/clojurecuda"
   :scm {:name "git"
@@ -17,30 +17,31 @@
                  [org.clojure/core.async "1.7.701"]
                  [uncomplicate/commons "0.16.1"]
                  [uncomplicate/fluokitten "0.10.0"]
-                 [org.uncomplicate/clojure-cpp "0.4.0"]
-                 [org.bytedeco/cuda-platform "12.6-9.5-1.5.11"]]
+                 [org.uncomplicate/clojure-cpp "0.4.1-SNAPSHOT"]
+                 [org.bytedeco/cuda-platform "12.8-9.8-1.5.12-SNAPSHOT"]]
 
-  :profiles {:dev {:plugins [[lein-midje "3.2.1"]
-                             [lein-codox "0.10.8"]
-                             [com.github.clj-kondo/lein-clj-kondo "0.2.5"]]
-                   :global-vars {*warn-on-reflection* true
-                                 *assert* true
-                                 *unchecked-math* :warn-on-boxed
-                                 *print-length* 128}
-                   :dependencies [[midje "1.10.10"]
-                                  [codox-theme-rdash "0.1.2"]
-                                  [org.bytedeco/cuda "12.6-9.5-1.5.11" :classifier linux-x86_64-redist]]
-                   :codox {:metadata {:doc/format :markdown}
-                           :source-uri "http://github.com/uncomplicate/clojurecuda/blob/master/{filepath}#L{line}"
-                           :output-path "docs/codox"
-                           :themes [:rdash]
-                           :namespaces [uncomplicate.clojurecuda.core
-                                        uncomplicate.clojurecuda.info
-                                        uncomplicate.clojurecuda.toolbox
-                                        uncomplicate.clojurecuda.internal.constants]}
-                   :jvm-opts ^:replace ["-Djavacpp.platform=linux-x86_64"]}}
+  :profiles {:dev [:dev/all ~(leiningen.core.utils/get-os)]
+             :dev/all {:plugins [[lein-midje "3.2.1"]
+                                 [lein-codox "0.10.8"]
+                                 [com.github.clj-kondo/lein-clj-kondo "0.2.5"]]
+                       :global-vars {*warn-on-reflection* true
+                                     *assert* true
+                                     *unchecked-math* :warn-on-boxed
+                                     *print-length* 128}
+                       :dependencies [[midje "1.10.10"]
+                                      [codox-theme-rdash "0.1.2"]]
+                       :codox {:metadata {:doc/format :markdown}
+                               :source-uri "http://github.com/uncomplicate/clojurecuda/blob/master/{filepath}#L{line}"
+                               :output-path "docs/codox"
+                               :themes [:rdash]
+                               :namespaces [uncomplicate.clojurecuda.core
+                                            uncomplicate.clojurecuda.info
+                                            uncomplicate.clojurecuda.toolbox
+                                            uncomplicate.clojurecuda.internal.constants]}}
+             :linux {:dependencies [[org.bytedeco/cuda "12.8-9.8-1.5.12-SNAPSHOT" :classifier linux-x86_64-redist]]}
+             :windows {:dependencies [[org.bytedeco/cuda "12.9-9.9-1.5.12-SNAPSHOT" :classifier windows-x86_64-redist]]}}
 
-  ;;:repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
+  :repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
 
   :javac-options ["-target" "1.8" "-source" "1.8" "-Xlint:-options"]
 
