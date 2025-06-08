@@ -18,7 +18,7 @@
                  [uncomplicate/commons "0.16.1"]
                  [uncomplicate/fluokitten "0.10.0"]
                  [org.uncomplicate/clojure-cpp "0.4.1-SNAPSHOT"]
-                 [org.bytedeco/cuda-platform "12.8-9.8-1.5.12-SNAPSHOT"]]
+                 [org.bytedeco/cuda-platform "12.9-9.9-1.5.12-SNAPSHOT"]]
 
   :profiles {:dev [:dev/all ~(leiningen.core.utils/get-os)]
              :dev/all {:plugins [[lein-midje "3.2.1"]
@@ -38,7 +38,7 @@
                                             uncomplicate.clojurecuda.info
                                             uncomplicate.clojurecuda.toolbox
                                             uncomplicate.clojurecuda.internal.constants]}}
-             :linux {:dependencies [[org.bytedeco/cuda "12.8-9.8-1.5.12-SNAPSHOT" :classifier linux-x86_64-redist]]}
+             :linux {:dependencies [[org.bytedeco/cuda "12.9-9.9-1.5.12-SNAPSHOT" :classifier linux-x86_64-redist]]}
              :windows {:dependencies [[org.bytedeco/cuda "12.9-9.9-1.5.12-SNAPSHOT" :classifier windows-x86_64-redist]]}}
 
   :repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
