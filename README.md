@@ -12,6 +12,6 @@ Clojure library for CUDA development. See the documentation at [ClojureCUDA webs
 
 ## License
 
-Copyright © 2017-2019 Dragan Djuric
+Copyright © 2017-2025 Dragan Djuric
 
 Distributed under the Eclipse Public License either version 1.0 or (at your option) any later version.
