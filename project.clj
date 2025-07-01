@@ -6,7 +6,7 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(defproject uncomplicate/clojurecuda "0.21.1-SNAPSHOT"
+(defproject uncomplicate/clojurecuda "0.22.0"
   :description "ClojureCUDA is a Clojure library for parallel computations with Nvidia's CUDA."
   :url "https://github.com/uncomplicate/clojurecuda"
   :scm {:name "git"
@@ -15,10 +15,10 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.12.0"]
                  [org.clojure/core.async "1.7.701"]
-                 [uncomplicate/commons "0.16.1"]
+                 [uncomplicate/commons "0.17.0"]
                  [uncomplicate/fluokitten "0.10.0"]
-                 [org.uncomplicate/clojure-cpp "0.4.1-SNAPSHOT"]
-                 [org.bytedeco/cuda-platform "12.9-9.10-1.5.12-SNAPSHOT"]]
+                 [org.uncomplicate/clojure-cpp "0.5.0"]
+                 [org.bytedeco/cuda-platform "12.9-9.10-1.5.12"]]
 
   :profiles {:dev [:dev/all ~(leiningen.core.utils/get-os)]
              :dev/all {:plugins [[lein-midje "3.2.1"]
@@ -37,9 +37,11 @@
                                :namespaces [uncomplicate.clojurecuda.core
                                             uncomplicate.clojurecuda.info
                                             uncomplicate.clojurecuda.toolbox
-                                            uncomplicate.clojurecuda.internal.constants]}}
-             :linux {:dependencies [[org.bytedeco/cuda "12.9-9.10-1.5.12-SNAPSHOT" :classifier "linux-x86_64-redist"]]}
-             :windows {:dependencies [[org.bytedeco/cuda "12.9-9.10-1.5.12-SNAPSHOT" :classifier "windows-x86_64-redist"]]}}
+                                            uncomplicate.clojurecuda.internal.constants]}
+                       :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=true"
+                                            "--enable-native-access=ALL-UNNAMED"]}
+             :linux {:dependencies [[org.bytedeco/cuda "12.9-9.10-1.5.12-20250612.143830-1" :classifier "linux-x86_64-redist"]]}
+             :windows {:dependencies [[org.bytedeco/cuda "12.9-9.10-1.5.12-20250612.145546-3" :classifier "windows-x86_64-redist"]]}}
 
   :repositories [["snapshots" "https://oss.sonatype.org/content/repositories/snapshots"]]
 
