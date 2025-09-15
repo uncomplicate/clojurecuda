@@ -22,9 +22,9 @@ ClojureCUDA uses native Nvidia GPU drivers, and CUDA toolkit, so it is very impo
 The most straightforward way to include ClojureCUDA in your project is with Leiningen.
 
 * Add the following dependency to your `project.clj`:![](https://clojars.org/uncomplicate/clojurecuda/latest-version.svg)
-* Add the appropriate JavaCPP CUDA distribution jar, such as `[org.bytedeco/cuda "12.3-8.9-1.5.10" :classifier linux-x86_64-redist]`
+* Add the appropriate JavaCPP CUDA distribution jar, such as `[org.bytedeco/cuda "12.9-9.10-1.5.13-20250913.041224-9" :classifier "linux-x86_64-redist"]`
 
-If you use the latest CUDA (as of this writing, `12.3`) that's all. Please not that JavaCPP CUDA is *VERY LARGE (2 GB)*, so the download will take time
+If you use the latest CUDA (as of this writing, `12.9`) that's all. Please not that JavaCPP CUDA distribution jars are *VERY LARGE (typically hundreds of MB)*, so the download will take time
 the first time you're doing it. If you do this from an IDE, you would not even know why your REPL is not up yet, and may kill the process. This
 will leave the JavaCPP CUDA jar broken. So, the first time you're using this dependency, I advise you to open the terminal (command prompt on Windows)
 and type `lein deps`. You'll see the progress and can patiently wait a minute or two until it's ready. The next time, your REPL will start instantly,
@@ -32,12 +32,9 @@ because everything will be cached in your local Maven repository (`<home>/.m2`).
 
 ClojureCUDA currently works out of the box on Linux and Windows, while Nvidia does not support macOS. For other plaforms, contact us.
 
-### Install CUDA Toolkit (LEGACY)
-
-**This is only required for old ClojureCUDA versions (0.17.0 and older). For 0.18.0 and up, you only need to have recent Nvidia GPU drivers installed on your system.**
-
-To use ClojureCUDA, you must have an Nvidia GPU, and install appropriate GPU drivers. If you need to create your own CUDA kernels (you most probably do), you also need CUDA Toolkit. You can download both the drivers and the toolkit as one bundle from [Nvidia's CUDA Toolkit page](https://developer.nvidia.com/cuda-toolkit). *Please note that ClojureCUDA requires a minimal CUDA version, which is currently `11.0`, and prefers the latest CUDA (currently `11.4`) so make sure that you have recently updated your drivers and the toolkit.* If you use older drivers, some things might work, but some might not.
-
+For the most up-to-date version information and technical details of how to use ClojureCUDA and set up your project, please
+see Neanderthal and Deep Diamond hello world projects which you can find under the respective /examples folders in
+these projects' source repositories (on GitHub).
 
 ## Usage
 
@@ -99,7 +96,7 @@ If at least one device was found, you can continue with the following to verify 
 ClojureCUDA is a Clojure library for High Performance Computing with CUDA, which supports Nvidia's GPUs. If you need to create programs for AMD, Intel, or even Nvidia's GPUs, or Intel's and AMD's CPUs, you probably need [ClojureCL](https://clojurecl.uncomplicate.org), ClojureCUDA's OpenCL based cousin.
 
 If you need higher-level high performance functionality, such as matrix computations, try [Neanderthal](https://neanderthal.uncomplicate.org).
-
+For tensors and deep learning, check out [Deep Diamond](https://github.com/uncomplicate/deep-diamond) and for AI models [Diamond ML](https://github.com/uncomplicate/diamond-ml)  computations, try [Neanderthal](https://neanderthal.uncomplicate.org).
 
 ## Where to go next
 
