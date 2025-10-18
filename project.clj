@@ -6,19 +6,19 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(defproject uncomplicate/clojurecuda "0.23.0"
+(defproject uncomplicate/clojurecuda "0.24.0-SNAPSHOT"
   :description "ClojureCUDA is a Clojure library for parallel computations with Nvidia's CUDA."
   :url "https://github.com/uncomplicate/clojurecuda"
   :scm {:name "git"
         :url "https://github.com/uncomplicate/clojurecuda"}
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.12.2"]
+  :dependencies [[org.clojure/clojure "1.12.3"]
                  [org.clojure/core.async "1.8.741"]
                  [uncomplicate/commons "0.18.0"]
                  [uncomplicate/fluokitten "0.10.0"]
                  [org.uncomplicate/clojure-cpp "0.6.0"]
-                 [org.bytedeco/cuda-platform "12.9-9.10-1.5.13-20250913.041212-3"]]
+                 [org.bytedeco/cuda-platform "12.9-9.10-1.5.12"]]
 
   :profiles {:dev [:dev/all ~(leiningen.core.utils/get-os)]
              :dev/all {:plugins [[lein-midje "3.2.1"]
@@ -40,10 +40,10 @@
                                             uncomplicate.clojurecuda.internal.constants]}
                        :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=true"
                                             "--enable-native-access=ALL-UNNAMED"]}
-             :linux {:dependencies [[org.bytedeco/cuda "12.9-9.10-1.5.13-20250913.041224-9" :classifier "linux-x86_64-redist"]]}
-             :windows {:dependencies [[org.bytedeco/cuda "12.9-9.10-1.5.13-20250913.041224-9" :classifier "windows-x86_64-redist"]]}}
+             :linux {:dependencies [[org.bytedeco/cuda-redist "12.9-9.10-1.5.12" :classifier "linux-x86_64"]]}
+             :windows {:dependencies [[org.bytedeco/cuda-redist "12.9-9.10-1.5.12" :classifier "wihdows-x86_64"]]}}
 
-  :repositories [["maven-central-snapshots" "https://central.sonatype.com/repository/maven-snapshots"]]
+  ;;:repositories [["maven-central-snapshots" "https://central.sonatype.com/repository/maven-snapshots"]]
 
   :javac-options ["-target" "1.8" "-source" "1.8" "-Xlint:-options"]
 
