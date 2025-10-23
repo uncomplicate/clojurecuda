@@ -32,36 +32,49 @@
 (def ^{:const true
        :doc "Available context limits."}
   ctx-limits
-  {:dev-runtime-pending-launch-count cudart/CU_LIMIT_DEV_RUNTIME_PENDING_LAUNCH_COUNT
+  {:cig-enabled cudart/CU_LIMIT_CIG_ENABLED
+   :cig-shmem-fallback cudart/CU_LIMIT_CIG_SHMEM_FALLBACK_ENABLED
+   :dev-runtime-pending-launch-count cudart/CU_LIMIT_DEV_RUNTIME_PENDING_LAUNCH_COUNT
    :dev-runtime-sync-depth cudart/CU_LIMIT_DEV_RUNTIME_SYNC_DEPTH
    :malloc-heap-size cudart/CU_LIMIT_MALLOC_HEAP_SIZE
    :max cudart/CU_LIMIT_MAX
    :max-l2-fetch-granularity cudart/CU_LIMIT_MAX_L2_FETCH_GRANULARITY
    :persisting-l2-cache-size cudart/CU_LIMIT_PERSISTING_L2_CACHE_SIZE
    :printf-fifo-size cudart/CU_LIMIT_PRINTF_FIFO_SIZE
+   :shmem-size cudart/CU_LIMIT_SHMEM_SIZE
    :stack-size cudart/CU_LIMIT_STACK_SIZE})
 
 (def ^{:const true
        :doc "Available shared memory configurations."}
   shared-config-map
   {:default-bank-size cudart/CU_SHARED_MEM_CONFIG_DEFAULT_BANK_SIZE
+   :default cudart/CU_SHARED_MEM_CONFIG_DEFAULT_BANK_SIZE
    :four-byte-bank-size cudart/CU_SHARED_MEM_CONFIG_FOUR_BYTE_BANK_SIZE
-   :eight-byte-bank-size cudart/CU_SHARED_MEM_CONFIG_EIGHT_BYTE_BANK_SIZE})
+   :four-byte cudart/CU_SHARED_MEM_CONFIG_FOUR_BYTE_BANK_SIZE
+   :int cudart/CU_SHARED_MEM_CONFIG_FOUR_BYTE_BANK_SIZE
+   :eight-byte-bank-size cudart/CU_SHARED_MEM_CONFIG_EIGHT_BYTE_BANK_SIZE
+   :eight-byte cudart/CU_SHARED_MEM_CONFIG_EIGHT_BYTE_BANK_SIZE
+   :long cudart/CU_SHARED_MEM_CONFIG_EIGHT_BYTE_BANK_SIZE})
 
 (defn dec-shared-config [^long config]
   (case config
-    0 :default-bank-size
-    1 :four-byte-bank-size
-    2 :eight-byte-bank-size
+    0 :default
+    1 :int
+    2 :long
     config))
 
 (def ^{:const true
        :doc "Available device P2P attributes."}
   p2p-attributes
   {:access-access-supported cudart/CU_DEVICE_P2P_ATTRIBUTE_ACCESS_ACCESS_SUPPORTED
+   :access-access cudart/CU_DEVICE_P2P_ATTRIBUTE_ACCESS_ACCESS_SUPPORTED
    :access-supported cudart/CU_DEVICE_P2P_ATTRIBUTE_ACCESS_SUPPORTED
+   :access cudart/CU_DEVICE_P2P_ATTRIBUTE_ACCESS_SUPPORTED
    :cuda-array-access-supported cudart/CU_DEVICE_P2P_ATTRIBUTE_CUDA_ARRAY_ACCESS_SUPPORTED
+   :cuda-array-access cudart/CU_DEVICE_P2P_ATTRIBUTE_CUDA_ARRAY_ACCESS_SUPPORTED
+   :cuda-array cudart/CU_DEVICE_P2P_ATTRIBUTE_CUDA_ARRAY_ACCESS_SUPPORTED
    :native-atomic-supported cudart/CU_DEVICE_P2P_ATTRIBUTE_NATIVE_ATOMIC_SUPPORTED
+   :native-atomic cudart/CU_DEVICE_P2P_ATTRIBUTE_NATIVE_ATOMIC_SUPPORTED
    :performance-rank cudart/CU_DEVICE_P2P_ATTRIBUTE_PERFORMANCE_RANK})
 
 (defn dec-compute-mode [^long mode]
@@ -85,7 +98,7 @@
   {:devicemap cudart/CU_MEMHOSTREGISTER_DEVICEMAP
    :iomemory cudart/CU_MEMHOSTREGISTER_IOMEMORY
    :portable cudart/CU_MEMHOSTREGISTER_PORTABLE
-   :read-onlyp cudart/CU_MEMHOSTREGISTER_READ_ONLY})
+   :read-only cudart/CU_MEMHOSTREGISTER_READ_ONLY})
 
 (def ^{:const true
        :doc "Available flags for the [[core/mem-host-attach]] function."}
@@ -134,9 +147,6 @@
        :doc "Available jit options defined in the CUDA standard."}
   jit-options
   {:cache-mode cudart/CU_JIT_CACHE_MODE
-   :cache-option-ca cudart/CU_JIT_CACHE_OPTION_CA
-   :cache-option-cg cudart/CU_JIT_CACHE_OPTION_CG
-   :cache-option-none cudart/CU_JIT_CACHE_OPTION_NONE
    :error-log-buffer cudart/CU_JIT_ERROR_LOG_BUFFER
    :error-log-buffer-size-bytes cudart/CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES
    :fallback-strategy cudart/CU_JIT_FALLBACK_STRATEGY
@@ -150,41 +160,48 @@
    :global-symbol-names cudart/CU_JIT_GLOBAL_SYMBOL_NAMES
    :info-log-buffer cudart/CU_JIT_INFO_LOG_BUFFER
    :info-log-buffer-size-bytes cudart/CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES
-   :input-cubin cudart/CU_JIT_INPUT_CUBIN
-   :input-fatbinary cudart/CU_JIT_INPUT_FATBINARY
-   :input-library cudart/CU_JIT_INPUT_LIBRARY
-   :input-nvvm cudart/CU_JIT_INPUT_NVVM
-   :input-object cudart/CU_JIT_INPUT_OBJECT
-   :input-ptx cudart/CU_JIT_INPUT_PTX
    :log-verbose cudart/CU_JIT_LOG_VERBOSE
    :lto cudart/CU_JIT_LTO
    :max-registers cudart/CU_JIT_MAX_REGISTERS
+   :max-threads-per-block cudart/CU_JIT_MAX_THREADS_PER_BLOCK
+   :min-cta-per-sm cudart/CU_JIT_MIN_CTA_PER_SM
    :new-sm3x-opt cudart/CU_JIT_NEW_SM3X_OPT
-   :num-input-tupes cudart/CU_JIT_NUM_INPUT_TYPES
    :num-options cudart/CU_JIT_NUM_OPTIONS
    :optimization-level cudart/CU_JIT_OPTIMIZATION_LEVEL
    :optimize-unused-device-variables cudart/CU_JIT_OPTIMIZE_UNUSED_DEVICE_VARIABLES
+   :override-directive-values cudart/CU_JIT_OVERRIDE_DIRECTIVE_VALUES
    :position-independent-code cudart/CU_JIT_POSITION_INDEPENDENT_CODE
    :prec-div cudart/CU_JIT_PREC_DIV
    :prec-sqrt cudart/CU_JIT_PREC_SQRT
    :referenced-kernel-count cudart/CU_JIT_REFERENCED_KERNEL_COUNT
+   :kernel-count cudart/CU_JIT_REFERENCED_KERNEL_COUNT
    :referenced-kernel-names cudart/CU_JIT_REFERENCED_KERNEL_NAMES
+   :kernel-names cudart/CU_JIT_REFERENCED_KERNEL_NAMES
    :referenced-variable-count cudart/CU_JIT_REFERENCED_VARIABLE_COUNT
+   :variable-count cudart/CU_JIT_REFERENCED_VARIABLE_COUNT
    :referenced-variable-names cudart/CU_JIT_REFERENCED_VARIABLE_NAMES
+   :variable-names cudart/CU_JIT_REFERENCED_VARIABLE_NAMES
    :target cudart/CU_JIT_TARGET
    :target-from-cucontext cudart/CU_JIT_TARGET_FROM_CUCONTEXT
    :threads-per-block cudart/CU_JIT_THREADS_PER_BLOCK
    :wall-time cudart/CU_JIT_WALL_TIME})
 
 (def ^{:const true
+       :doc "Available jit cache modes defined in the CUDA standard."}
+  jit-cache-mode
+  {:ca cudart/CU_JIT_CACHE_OPTION_CA
+   :cg cudart/CU_JIT_CACHE_OPTION_CG
+   :none cudart/CU_JIT_CACHE_OPTION_NONE})
+
+(def ^{:const true
        :doc "Available jit input types defined in the CUDA standard."}
   jit-input-types
   {:cubin cudart/CU_JIT_INPUT_CUBIN
-   :ptx cudart/CU_JIT_INPUT_PTX
    :fatbinary cudart/CU_JIT_INPUT_FATBINARY
-   :object cudart/CU_JIT_INPUT_OBJECT
    :library cudart/CU_JIT_INPUT_LIBRARY
    :nvvm cudart/CU_JIT_INPUT_NVVM
+   :object cudart/CU_JIT_INPUT_OBJECT
+   :ptx cudart/CU_JIT_INPUT_PTX
    :num cudart/CU_JIT_NUM_INPUT_TYPES})
 
 (def ^{:const true
@@ -209,6 +226,7 @@
    cudart/CUDA_ERROR_ECC_UNCORRECTABLE :ecc-uncorrectable
    cudart/CUDA_ERROR_EXTERNAL_DEVICE :external-device
    cudart/CUDA_ERROR_FILE_NOT_FOUND :file-not-found
+   cudart/CUDA_ERROR_FUNCTION_NOT_LOADED :function-not-loaded
    cudart/CUDA_ERROR_GRAPH_EXEC_UPDATE_FAILURE :graph-exec-update-failure
    cudart/CUDA_ERROR_HARDWARE_STACK_ERROR :hardware-stack-errox
    cudart/CUDA_ERROR_HOST_MEMORY_ALREADY_REGISTERED :host-memory-already-registered
@@ -225,14 +243,18 @@
    cudart/CUDA_ERROR_INVALID_IMAGE :invalid-image
    cudart/CUDA_ERROR_INVALID_PC :invalid-pc
    cudart/CUDA_ERROR_INVALID_PTX :invalid-ptx
+   cudart/CUDA_ERROR_INVALID_RESOURCE_CONFIGURATION :invalid-resource-configuration
+   cudart/CUDA_ERROR_INVALID_RESOURCE_TYPE :invalid-resource-type
    cudart/CUDA_ERROR_INVALID_SOURCE :invalid-source
    cudart/CUDA_ERROR_INVALID_VALUE :invalid-value
    cudart/CUDA_ERROR_JIT_COMPILATION_DISABLED :jit-compilation-disabled
    cudart/CUDA_ERROR_JIT_COMPILER_NOT_FOUND :jit-compiler-not-found
+   cudart/CUDA_ERROR_KEY_ROTATION :key-rotation
    cudart/CUDA_ERROR_LAUNCH_FAILED :launch-failed
    cudart/CUDA_ERROR_LAUNCH_INCOMPATIBLE_TEXTURING :launch-incompatible-texturing
    cudart/CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES :launch-out-of-resources
    cudart/CUDA_ERROR_LAUNCH_TIMEOUT :launch-timeout
+   cudart/CUDA_ERROR_LOSSY_QUERY :lossy-query
    cudart/CUDA_ERROR_MAP_FAILED :map-failed
    cudart/CUDA_ERROR_MISALIGNED_ADDRESS :misaligned-address
    cudart/CUDA_ERROR_MPS_CLIENT_TERMINATED :client-terminated
@@ -248,14 +270,15 @@
    cudart/CUDA_ERROR_NOT_MAPPED :not-mapped
    cudart/CUDA_ERROR_NOT_MAPPED_AS_ARRAY :not-mapped-as-array
    cudart/CUDA_ERROR_NOT_MAPPED_AS_POINTER :mapped-as-pointer
+   cudart/CUDA_ERROR_NOT_PERMITTED :not-permitted
    cudart/CUDA_ERROR_NOT_READY :not-ready
    cudart/CUDA_ERROR_NOT_SUPPORTED :not-supported
    cudart/CUDA_ERROR_NVLINK_UNCORRECTABLE :nvlink-uncorrectable
    cudart/CUDA_ERROR_OPERATING_SYSTEM :operating-system
    cudart/CUDA_ERROR_OUT_OF_MEMORY :out-of-memory
-   cudart/CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED :already-enabled
-   cudart/CUDA_ERROR_PEER_ACCESS_NOT_ENABLED :access-not-enabled
-   cudart/CUDA_ERROR_PEER_ACCESS_UNSUPPORTED :access-unsupported
+   cudart/CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED :peer-access-already-enabled
+   cudart/CUDA_ERROR_PEER_ACCESS_NOT_ENABLED :peer-access-not-enabled
+   cudart/CUDA_ERROR_PEER_ACCESS_UNSUPPORTED :peer-access-unsupported
    cudart/CUDA_ERROR_PRIMARY_CONTEXT_ACTIVE :context-active
    cudart/CUDA_ERROR_PROFILER_ALREADY_STARTED :profiler-already-started
    cudart/CUDA_ERROR_PROFILER_ALREADY_STOPPED :profiler-already-stopped
@@ -274,6 +297,7 @@
    cudart/CUDA_ERROR_STUB_LIBRARY :stub-library
    cudart/CUDA_ERROR_SYSTEM_DRIVER_MISMATCH :driver-mismatch
    cudart/CUDA_ERROR_SYSTEM_NOT_READY :system-not-ready
+   cudart/CUDA_ERROR_TENSOR_MEMORY_LEAK :tensor-memory-leak
    cudart/CUDA_ERROR_TIMEOUT :timeout
    cudart/CUDA_ERROR_TOO_MANY_PEERS :too-many-peers
    cudart/CUDA_ERROR_UNKNOWN :unknown
@@ -310,7 +334,6 @@
    cudart/cudaErrorMemoryValueTooLarge :memory-value-too-large
    cudart/cudaErrorMissingConfiguration :missing-configuration
    cudart/cudaErrorMixedDeviceExecution :mixed-device-execution
-   cudart/cudaErrorNotPermitted :not-permitted
    cudart/cudaErrorNotYetImplemented :not-yet-implemented
    cudart/cudaErrorPriorLaunchFailure :prior-launch-failure
    cudart/cudaErrorSoftwareValidityNotEstablished :software-validity-not-established
@@ -325,12 +348,18 @@
   nvrtc-result-codes
   {nvrtc/NVRTC_SUCCESS :success
    nvrtc/NVRTC_ERROR_BUILTIN_OPERATION_FAILURE :builtin-operation-failure
+   nvrtc/NVRTC_ERROR_CANCELLED :cancelled
    nvrtc/NVRTC_ERROR_COMPILATION :compilation
-   nvrtc/NVRTC_ERROR_INVALID_INPUT :invalid-input
    nvrtc/NVRTC_ERROR_INTERNAL_ERROR :internal-error
+   nvrtc/NVRTC_ERROR_INVALID_INPUT :invalid-input
    nvrtc/NVRTC_ERROR_INVALID_OPTION :invalid-option
    nvrtc/NVRTC_ERROR_INVALID_PROGRAM :invalid-program
    nvrtc/NVRTC_ERROR_NAME_EXPRESSION_NOT_VALID :name-expression-not-valid
+   nvrtc/NVRTC_ERROR_NO_LOWERED_NAMES_BEFORE_COMPILATION :no-lowered-names-before-compilation
+   nvrtc/NVRTC_ERROR_NO_NAME_EXPRESSIONS_AFTER_COMPILATION :no-name-expressions-after-compilation
+   nvrtc/NVRTC_ERROR_NO_PCH_CREATE_ATTEMPTED :pch-create-attempted
    nvrtc/NVRTC_ERROR_OUT_OF_MEMORY :out-of-memory
+   nvrtc/NVRTC_ERROR_PCH_CREATE :pch-create
+   nvrtc/NVRTC_ERROR_PCH_CREATE_HEAP_EXHAUSTED :pch-create-heap-exhausted
    nvrtc/NVRTC_ERROR_PROGRAM_CREATION_FAILURE :program-creation-failure
    nvrtc/NVRTC_ERROR_TIME_FILE_WRITE_FAILED :time-file-write-ahead})

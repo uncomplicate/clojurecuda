@@ -27,7 +27,8 @@
            [clojure.lang IFn AFn Seqable]
            [org.bytedeco.javacpp Pointer BytePointer PointerPointer LongPointer IntPointer]
            [org.bytedeco.cuda.global cudart nvrtc]
-           [org.bytedeco.cuda.cudart CUctx_st CUstream_st CUevent_st CUmod_st CUlinkState_st]
+           [org.bytedeco.cuda.cudart CUctx_st CUstream_st CUevent_st CUmod_st CUlinkState_st
+            CUctxCreateParams]
            org.bytedeco.cuda.nvrtc._nvrtcProgram
            [uncomplicate.clojure_cpp StringPointer KeywordPointer]
            [uncomplicate.clojurecuda.internal.javacpp CUHostFn CUStreamCallback]))
@@ -260,10 +261,11 @@
   For available flags, see [[constants/ctx-flags]].
   "
   [^long dev ^long flags]
-  (let [res (CUctx_st.)]
-    (with-check (cudart/cuCtxCreate res flags dev)
-      {:dev (info dev) :flags flags}
-      res)))
+  (with-release [create-params (CUctxCreateParams.)]
+    (let [res (CUctx_st.)]
+      (with-check (cudart/cuCtxCreate res create-params flags dev)
+        {:dev (info dev) :flags flags}
+        res))))
 
 (defn current-context*
   "If `ctx` is provided, bounds it as current. Returns the CUDA context bound to the calling CPU thread."
