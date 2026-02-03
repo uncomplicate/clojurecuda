@@ -6,19 +6,19 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(defproject uncomplicate/clojurecuda "0.25.0"
+(defproject uncomplicate/clojurecuda "0.26.0-SNAPSHOT"
   :description "ClojureCUDA is a Clojure library for parallel computations with Nvidia's CUDA."
   :url "https://github.com/uncomplicate/clojurecuda"
   :scm {:name "git"
         :url "https://github.com/uncomplicate/clojurecuda"}
   :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.12.3"]
+            :url "http://www.eclipse.org/legal/epl-v10.HTML"}
+  :dependencies [[org.clojure/clojure "1.12.4"]
                  [org.clojure/core.async "1.8.741"]
-                 [uncomplicate/commons "0.18.0"]
+                 [uncomplicate/commons "0.19.0"]
                  [uncomplicate/fluokitten "0.10.0"]
                  [org.uncomplicate/clojure-cpp "0.6.0"]
-                 [org.bytedeco/cuda-platform "13.0-9.14-1.5.13-20251022.164244-3"]]
+                 [org.bytedeco/cuda-platform "13.1-9.18-1.5.13-20260203.003653-2"]]
 
   :profiles {:dev [:dev/all ~(leiningen.core.utils/get-os)]
              :dev/all {:plugins [[lein-midje "3.2.1"]
@@ -40,8 +40,8 @@
                                             uncomplicate.clojurecuda.internal.constants]}
                        :jvm-opts ^:replace ["-Dclojure.compiler.direct-linking=true"
                                             "--enable-native-access=ALL-UNNAMED"]}
-             :linux {:dependencies [[org.bytedeco/cuda-redist "13.0-9.14-1.5.13-20251022.164318-20" :classifier "linux-x86_64"]]}
-             :windows {:dependencies [[org.bytedeco/cuda-redist "13.0-9.14-1.5.13-20251022.164318-20" :classifier "windows-x86_64"]]}}
+             :linux {:dependencies [[org.bytedeco/cuda-redist "13.1-9.18-1.5.13-20260203.003728-10" :classifier "linux-x86_64"]]}
+             :windows {:dependencies [[org.bytedeco/cuda-redist "13.1-9.18-1.5.13-20260203.003728-10" :classifier "windows-x86_64"]]}}
 
   :repositories [["maven-central-snapshots" "https://central.sonatype.com/repository/maven-snapshots"]]
 
