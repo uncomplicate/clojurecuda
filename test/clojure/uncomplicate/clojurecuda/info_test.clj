@@ -10,8 +10,11 @@
   (:require [midje.sweet :refer [facts =>]]
             [uncomplicate.commons.core :refer [with-release info]]
             [uncomplicate.clojurecuda
-             [core :refer [compile! context device function init module program stream with-context]]
-             [info :refer [driver-version limit limit! stream-flag]]]
+             [core :refer [compile! context device function init module program stream with-context
+                           current-context]]
+             [info :refer [driver-version limit limit! stream-flag stream-ctx
+                           max-active-blocks-per-multiprocessor available-dynamic-mem-per-block
+                           max-potential-block-size]]]
             [uncomplicate.clojurecuda.internal.constants :refer [stream-flags]]))
 
 (init)
@@ -34,10 +37,12 @@
 (with-context (context (device))
   (with-release [hstream (stream :non-blocking)]
     (facts
-     "Stream info tests."
-     (count (info hstream)) => 2
-     (stream-flag hstream) => (stream-flags :non-blocking)
-     (:flag (info hstream))))) => :non-blocking
+      "Stream info tests."
+      (stream-flag hstream) => (stream-flags :non-blocking)
+      (:flag (info hstream )) => :non-blocking
+      (count (info hstream)) => 2
+      (stream-ctx hstream) => (current-context)
+)))
 
 (let [program-source (slurp "test/cuda/uncomplicate/clojurecuda/kernels/test.cu")]
   (with-context (context (device))
@@ -46,4 +51,7 @@
                    fun (function modl "inc")]
       (facts
        "function info tests."
-       (count (info fun)) => 7))))
+       (count (info fun)) => 7
+       (max-potential-block-size fun) => [68 1024]
+       (available-dynamic-mem-per-block fun 1 1024) => 49152
+       (max-active-blocks-per-multiprocessor fun 1024 0) => 1))))

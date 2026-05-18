@@ -40,8 +40,9 @@
   Please see [CUDA Driver API](https://docs.nvidia.com/cuda/pdf/CUDA_Driver_API.pdf) for details
   not discussed in ClojureCUDA documentation.
   "
-  (:require [uncomplicate.commons
-             [core :refer [with-release let-release info bytesize sizeof size]]
+  (:require [clojure.java.io :as io]
+            [uncomplicate.commons
+             [core :refer [with-release let-release info bytesize sizeof size Releaseable release]]
              [utils :refer [mask count-groups dragan-says-ex]]]
             [uncomplicate.fluokitten.protocols :refer [extract]]
             [uncomplicate.clojure-cpp
@@ -51,16 +52,28 @@
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
              [constants :refer [ctx-flags event-flags mem-attach-flags mem-host-alloc-flags
-                                mem-host-register-flags p2p-attributes stream-flags]]
+                                mem-host-register-flags p2p-attributes stream-flags built-in-headers]]
              [impl :refer [->CUDevice ->CUDevicePtr add-host-fn* attach-mem* can-access-peer*
                            compile* context* cu-address* current-context* event* host-fn* link*
                            malloc-runtime* mem-alloc-host* mem-alloc-managed* mem-host-alloc*
                            mem-host-register* memcpy* memcpy-host* memset* module-load* offset
                            p2p-attribute* program* program-log* ptx* ready* set-parameter* stream*]]
              [utils :refer [with-check]]])
-  (:import [org.bytedeco.javacpp Pointer LongPointer SizeTPointer PointerPointer]
+  (:import clojure.lang.IFn
+           [org.bytedeco.javacpp Pointer LongPointer SizeTPointer PointerPointer]
            org.bytedeco.cuda.global.cudart
            [org.bytedeco.cuda.cudart CUctx_st CUlinkState_st CUmod_st CUfunc_st CUstream_st CUevent_st]))
+
+(def ^{:dynamic true
+       :doc "Dynamically bound locations of standard header files such as stdint.h."}
+  *headers* {})
+
+(defn slurp-header [header]
+  (slurp (io/resource (or (built-in-headers header)
+                          (dragan-says-ex "Unknown header." {:available (keys built-in-headers)})))))
+
+(defn slurp-headers [& headers]
+  (zipmap headers (map slurp-header headers)))
 
 (defn init
   "Initializes the CUDA driver. This function must be called before any other function
@@ -615,7 +628,7 @@
   If `data` is not provided, places `hstream` under data.
   "
   ([hstream f data]
-   (add-host-fn* hstream f data)
+   (add-host-fn* hstream f (safe data))
    hstream)
   ([hstream f]
    (add-host-fn* hstream f hstream)
@@ -747,9 +760,13 @@
   hash map of `headers` (as strings) and their names.
   "
   ([^String name ^String source-code headers]
-   (program* (string-pointer name) (string-pointer source-code)
-             (pointer-pointer (into-array String (vals headers)))
-             (pointer-pointer (into-array String (keys headers)))))
+   (let [headers (reduce-kv (fn [acc k v]
+                              (assoc acc k (or v (slurp-header k))))
+                            {}
+                            (merge *headers* headers))]
+     (program* (string-pointer name) (string-pointer source-code)
+               (pointer-pointer (into-array String (vals headers)))
+               (pointer-pointer (into-array String (keys headers))))))
   ([source-code headers]
    (program nil source-code headers))
   ([source-code]

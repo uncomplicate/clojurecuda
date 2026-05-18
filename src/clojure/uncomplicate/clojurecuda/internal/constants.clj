@@ -363,3 +363,11 @@
    nvrtc/NVRTC_ERROR_PCH_CREATE_HEAP_EXHAUSTED :pch-create-heap-exhausted
    nvrtc/NVRTC_ERROR_PROGRAM_CREATION_FAILURE :program-creation-failure
    nvrtc/NVRTC_ERROR_TIME_FILE_WRITE_FAILED :time-file-write-ahead})
+
+(def ^{:const true
+       :doc "Header files built into ClojureCUDA."}
+  built-in-headers
+  {"stdint.h" "uncomplicate/clojurecuda/include/jitify/stdint.h"
+   "float.h" "uncomplicate/clojurecuda/include/jitify/float.h"
+   "stddef.h" "uncomplicate/clojurecuda/include/jitify/stddef.h"
+   "cuda_fp16.h" "uncomplicate/clojurecuda/include/cudart/cuda_fp16.h"})
