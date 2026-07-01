@@ -186,6 +186,15 @@
        (with-context (context dev#)
          ~@body))))
 
+(defn reset-device!
+  "Destroys all allocations and resets all state in context `ctx`"
+  ([ctx]
+   (in-context
+    ctx
+    (with-check (cudart/cudaDeviceReset) ctx)))
+  ([]
+   (with-check (cudart/cudaDeviceReset) (current-context))))
+
 ;; ================== Memory Management  ==============================================
 
 (defn ^:private check-size [ptr ^long offset ^long byte-count]
