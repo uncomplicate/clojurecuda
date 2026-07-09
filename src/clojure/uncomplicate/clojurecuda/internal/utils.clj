@@ -13,7 +13,8 @@
   any of the functions defined here."
   (:require [uncomplicate.commons.utils :as utils]
             [uncomplicate.clojurecuda.internal.constants :refer [cu-result-codes]])
-  (:import clojure.lang.ExceptionInfo))
+  (:import clojure.lang.ExceptionInfo
+           org.bytedeco.cuda.global.cudart))
 
 ;; ============= Error Codes ===================================================
 

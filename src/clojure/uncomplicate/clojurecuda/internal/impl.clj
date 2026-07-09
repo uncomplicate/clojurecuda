@@ -45,6 +45,8 @@
   (set-parameter* [parameter pp i]
     (put-entry! pp i (pointer parameter))))
 
+(declare is-primary* release-primary-context* pop-context* current-context*)
+
 ;; ==================== Release resources =======================
 
 (deftype CUDevice [^int dev]
@@ -63,7 +65,9 @@
   Releaseable
   (release [this]
     (locking this
-      (cudart/cuCtxDestroy this)
+      (if (is-primary* this)
+        (release-primary-context* this)
+        (cudart/cuCtxDestroy this))
       (.deallocate this)
       (.setNull this)
       true)))
@@ -257,15 +261,22 @@
 ;; =================== Context Management ==================================
 
 (defn context*
-  "Creates a CUDA context on the `device` using a raw integer `flag`.
+  "Creates a CUDA context on the `device` using raw integer `flags`.
+  If `flags` is not provided, retains the primary context for this device (doesn't push it to the context stack).
   For available flags, see [[constants/ctx-flags]].
   "
-  [^long dev ^long flags]
-  (with-release [create-params (CUctxCreateParams.)]
-    (let [res (CUctx_st.)]
-      (with-check (cudart/cuCtxCreate res create-params flags dev)
-        {:dev (info dev) :flags flags}
-        res))))
+  ([^long dev ^long flags]
+   (with-release [create-params (CUctxCreateParams.)]
+     (let [res (CUctx_st.)]
+       (with-check (cudart/cuCtxCreate res create-params flags dev)
+         {:dev (info dev) :flags flags}
+         res))))
+  ([^long dev]
+   (with-release [create-params (CUctxCreateParams.)]
+     (let [res (CUctx_st.)]
+       (with-check (cudart/cuDevicePrimaryCtxRetain res dev)
+         {:dev (info dev)}
+         res)))))
 
 (defn current-context*
   "If `ctx` is provided, bounds it as current. Returns the CUDA context bound to the calling CPU thread."
@@ -274,6 +285,32 @@
      (with-check (cudart/cuCtxGetCurrent ctx) ctx)))
   ([^CUctx_st ctx]
    (with-check (cudart/cuCtxSetCurrent ctx) ctx)))
+
+(defn pop-context* []
+  (let [ctx (CUctx_st.)]
+    (with-check (cudart/cuCtxPopCurrent ctx) ctx)))
+
+(defn ctx-device*
+  "Returns the device for the current context."
+  (^long []
+   (with-release [res (int-pointer* 1)]
+     (with-check (cudart/cuCtxGetDevice res) (get-entry res 0))))
+  (^long [^CUctx_st ctx]
+   (with-release [res (int-pointer* 1)]
+     (with-check (cudart/cuCtxGetDevice_v2 res ctx) (get-entry res 0)))))
+
+(defn release-primary-context* [^CUctx_st ctx]
+  (with-release [res (int-pointer* 1)]
+    (with-check (cudart/cuCtxGetDevice_v2 res ctx)
+      (with-check (cudart/cuDevicePrimaryCtxRelease (get-entry res 0))
+        ctx))))
+
+(defn is-primary* [^CUctx_st ctx]
+  (let [dev (ctx-device* ctx)]
+    (let [primary-ctx (context* dev)]
+      (try
+        (= (address primary-ctx) (address ctx))
+        (finally (release-primary-context* primary-ctx))))))
 
 ;; ==================== Linear memory ================================================
 
@@ -929,11 +966,11 @@
 (defmethod print-method _nvrtcProgram [p w]
   (format-pointer "Program" p w))
 
-(defmethod print-method CUDevicePtr [p w]
-  (format-pointer "DevicePtr" p w))
+(defmethod print-method CUDevicePtr [p w ^java.io.Writer w]
+  (.write w (str p)))
 
-(defmethod print-method CUPinnedPtr [p w]
-  (format-pointer "PinnedPtr" p w))
+(defmethod print-method CUPinnedPtr [p w ^java.io.Writer w]
+  (.write w (str p)))
 
-(defmethod print-method CUMappedPtr [p w]
-  (format-pointer "MappedPtr" p w))
+(defmethod print-method CUMappedPtr [p w ^java.io.Writer w]
+  (.write w (str p)))

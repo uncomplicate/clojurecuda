@@ -44,7 +44,7 @@
             [uncomplicate.commons
              [core :refer [with-release let-release info bytesize sizeof size Releaseable release]]
              [utils :refer [mask count-groups dragan-says-ex]]]
-            [uncomplicate.fluokitten.protocols :refer [extract]]
+            [uncomplicate.fluokitten.core :refer [extract]]
             [uncomplicate.clojure-cpp
              :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer
                      size-t-pointer pointer-pointer get-entry put-entry! safe type-pointer position!
@@ -52,12 +52,14 @@
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
              [constants :refer [ctx-flags event-flags mem-attach-flags mem-host-alloc-flags
-                                mem-host-register-flags p2p-attributes stream-flags built-in-headers]]
+                                mem-host-register-flags p2p-attributes stream-flags built-in-headers
+                                cu-result-codes]]
              [impl :refer [->CUDevice ->CUDevicePtr add-host-fn* attach-mem* can-access-peer*
                            compile* context* cu-address* current-context* event* host-fn* link*
                            malloc-runtime* mem-alloc-host* mem-alloc-managed* mem-host-alloc*
                            mem-host-register* memcpy* memcpy-host* memset* module-load* offset
-                           p2p-attribute* program* program-log* ptx* ready* set-parameter* stream*]]
+                           p2p-attribute* program* program-log* ptx* ready* set-parameter* stream*
+                           is-primary* pop-context*]]
              [utils :refer [with-check]]])
   (:import clojure.lang.IFn
            [org.bytedeco.javacpp Pointer LongPointer SizeTPointer PointerPointer]
@@ -110,9 +112,11 @@
 
 ;; =================== Context Management ==================================
 
+
 (defn context
   "Creates a CUDA context on the `device` using a keyword `flag`.
-  For available flags, see [[internal.constants/ctx-flags]]. The default is none.
+  For available flags, see [[internal.constants/ctx-flags]].
+  If the flag is not provided, retains the primary context for the device.
   The context must be released after use.
 
   See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
@@ -122,7 +126,9 @@
              (or (ctx-flags flag)
                  (throw (ex-info "Unknown context flag." {:flag flag :available ctx-flags})))))
   ([dev]
-   (context* (extract dev) 0)))
+   (context* (extract dev)))
+  ([]
+   (context* 0)))
 
 (defn current-context
   "Returns the CUDA context bound to the calling CPU thread.
@@ -144,8 +150,7 @@
   See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   []
-  (let [ctx (CUctx_st.)]
-    (with-check (cudart/cuCtxPopCurrent ctx) ctx)))
+  (pop-context*))
 
 (defn push-context!
   "Pushes a context `ctx` on the current CPU thread.
@@ -176,24 +181,40 @@
      (in-context ctx# ~@body)))
 
 (defmacro with-default
-  "Initializes CUDA, creates the default context and executes the body in it.
+  "Initializes CUDA, retains the primary context and executes the body in it.
   See [CUDA Context Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__CTX.html).
   "
   [& body]
   `(do
      (init)
-     (with-release [dev# (device)]
-       (with-context (context dev#)
-         ~@body))))
+     (with-context (context)
+       ~@body)))
 
-(defn reset-device!
-  "Destroys all allocations and resets all state in context `ctx`"
-  ([ctx]
-   (in-context
-    ctx
-    (with-check (cudart/cudaDeviceReset) ctx)))
+(defn reset-context!
+  "Destroys all allocations and resets all state in the primary context of the device `dev`"
+  ([dev]
+   (with-check
+     (cudart/cuDevicePrimaryCtxReset (extract dev))
+     dev))
   ([]
-   (with-check (cudart/cudaDeviceReset) (current-context))))
+   (reset-context! 0)))
+
+(defn primary?
+  ([ctx]
+   (is-primary* ctx))
+  ([]
+   (is-primary* (current-context))))
+
+(defn last-error
+  ([reset?]
+   (if reset?
+     (let [err-code (if reset?
+                      (cudart/cudaGetLastError)
+                      (cudart/cudaPeekAtLastError))]
+       (get cu-result-codes err-code err-code))))
+  ([]
+   (let [err-code (cudart/cudaGetLastError)]
+     (get cu-result-codes err-code err-code))))
 
 ;; ================== Memory Management  ==============================================
 

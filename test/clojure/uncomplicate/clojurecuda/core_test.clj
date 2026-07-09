@@ -13,7 +13,7 @@
              :refer [release with-release size bytesize let-release releaseable]]
             [uncomplicate.clojure-cpp :as cpp
              :refer [pointer float-pointer byte-pointer get-entry get-float put-float! int-pointer
-                     long-pointer put-int! pointer-seq put-entry! fill! ptr address position!]]
+                     long-pointer put-int! pointer-seq put-entry! fill! ptr address position! null?]]
             [uncomplicate.clojurecuda
              [core :refer :all]
              [info :as info :refer [pci-bus-id-string]]]
@@ -39,20 +39,35 @@
 (facts
   "Context tests"
   (with-release [dev (device 0)]
+    (reset-context! dev) => dev
+    (when (not (null? (current-context)))
+      (pop-context!))
+    (let [ctx (context dev)]
+      (primary? ctx) => true
+      (primary?) => (throws ExceptionInfo)
+      (in-context ctx
+        (primary?) => true)
+      (primary?) => (throws ExceptionInfo)
+      (reset-context! dev) => dev
+      (reset-context!) => 0)
     (let [ctx (context dev :sched-auto)]
       ctx => truthy
+      (primary? ctx) => false
+      (primary?) => false
       (release ctx) => true
       (context dev :unknown) => (throws ExceptionInfo))
     (let [ctx1 (context dev :sched-blocking-sync)
           ctx2 (context dev :sched-blocking-sync)]
+      (current-context) => ctx2
       (with-context ctx1
         (with-context ctx2
           (current-context) => ctx2
           (do (pop-context!) (current-context)) => ctx1
-          (current-context! ctx2) => ctx2
+          (push-context! ctx2) => ctx2
           (current-context) => ctx2
           (release ctx2) => true
-          (release ctx2) => true)))))
+          (release ctx2) => true
+          (current-context) => ctx1)))))
 
 ;; =============== Module Management & Execution Control Tests =====================================
 
@@ -154,7 +169,6 @@
 ;; =============== Stream Management Tests ==============================================
 
 (with-context (context (device 0) :map-host)
-
   (facts
     "Stream creation and memory copy tests."
     (with-release [strm (stream :non-blocking)

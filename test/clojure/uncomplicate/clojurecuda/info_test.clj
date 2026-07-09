@@ -11,7 +11,7 @@
             [uncomplicate.commons.core :refer [with-release info]]
             [uncomplicate.clojurecuda
              [core :refer [compile! context device function init module program stream with-context
-                           current-context]]
+                           current-context push-context!]]
              [info :refer [driver-version limit limit! stream-flag stream-ctx
                            max-active-blocks-per-multiprocessor available-dynamic-mem-per-block
                            max-potential-block-size]]]
@@ -28,6 +28,7 @@
  (count (info (device 0))) => 83)
 
 (with-release [ctx (context (device))]
+  (push-context! ctx)
   (facts
    "Context info tests."
    (count (info ctx)) => 16
@@ -41,8 +42,7 @@
       (stream-flag hstream) => (stream-flags :non-blocking)
       (:flag (info hstream )) => :non-blocking
       (count (info hstream)) => 2
-      (stream-ctx hstream) => (current-context)
-)))
+      (stream-ctx hstream) => (current-context))))
 
 (let [program-source (slurp "test/cuda/uncomplicate/clojurecuda/kernels/test.cu")]
   (with-context (context (device))
