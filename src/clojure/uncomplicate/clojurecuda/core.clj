@@ -32,7 +32,7 @@
   - Execution control: [[gdid-1d]], [[grid-2d]], [[grid-3d]], [[global]], [[set-parameter!]],
   [[parameters]], [[function]], [[launch!]].
   - Stream management: [[stream]], [[default-stream]], [[ready?]], [[synchronize!]],
-  [[add-host-fn!]], [[listen!]], [[wait-event!]], [[attach-mem!]].
+  [[launch-fn!]], [[listen!]], [[wait-event!]], [[attach-mem!]].
   - Event management: [[event]], [[elapsed-time!]], [[record!]], [[can-access-peer]],
   [[p2p-attribute]], [[disable-peer-access!]], [[enable-peer-access!]].
   - NVRTC program JIT: [[program]], [[program-log]], [[compile!]], [[ptx]].
@@ -48,24 +48,24 @@
             [uncomplicate.clojure-cpp
              :refer [null? pointer byte-pointer string-pointer int-pointer long-pointer
                      size-t-pointer pointer-pointer get-entry put-entry! safe type-pointer position!
-                     capacity! address]]
+                     capacity! address get-keyword]]
             [uncomplicate.clojurecuda.info :as cuda-info]
             [uncomplicate.clojurecuda.internal
              [constants :refer [ctx-flags event-flags mem-attach-flags mem-host-alloc-flags
                                 mem-host-register-flags p2p-attributes stream-flags built-in-headers
                                 cu-result-codes]]
-             [impl :refer [->CUDevice ->CUDevicePtr add-host-fn* attach-mem* can-access-peer*
-                           compile* context* cu-address* current-context* event* host-fn* link*
+             [impl :refer [->CUDevice ->CUDevicePtr host-fn* attach-mem* compile*
+                           can-access-peer* context* cu-address* current-context* event* link*
                            malloc-runtime* mem-alloc-host* mem-alloc-managed* mem-host-alloc*
                            mem-host-register* memcpy* memcpy-host* memset* module-load* offset
                            p2p-attribute* program* program-log* ptx* ready* set-parameter* stream*
-                           is-primary* pop-context*]]
+                           is-primary* pop-context* synchronize* record-deref* launch-host-fn*]]
              [utils :refer [with-check]]])
-  (:import clojure.lang.IFn
+  (:import [clojure.lang IFn Keyword]
            [org.bytedeco.javacpp Pointer LongPointer SizeTPointer PointerPointer]
            org.bytedeco.cuda.global.cudart
-           [org.bytedeco.cuda.cudart CUctx_st CUlinkState_st CUmod_st CUfunc_st CUstream_st CUevent_st]))
-
+           [org.bytedeco.cuda.cudart CUctx_st CUlinkState_st CUmod_st CUfunc_st CUstream_st CUevent_st]
+           uncomplicate.clojurecuda.internal.javacpp.CUHostFn))
 (def ^{:dynamic true
        :doc "Dynamically bound locations of standard header files such as stdint.h."}
   *headers* {})
@@ -647,34 +647,27 @@
   (= cudart/CUDA_SUCCESS (ready* (extract obj))))
 
 (defn synchronize!
-  "Blocks the current thread until the context's or `hstream`'s tasks complete."
+  "Blocks the current thread until the context's, or `sync`'s tasks complete.
+  Sync can be any object that implements `Synchronizable`: stream, event, context.
+  If called with a promise `prom`, records a host function that delivers the promise
+  in an io-thread, and blocks this thread by dereferencing a promise."
   ([]
    (with-check (cudart/cuCtxSynchronize) true))
-  ([^CUstream_st hstream]
-   (with-check (cudart/cuStreamSynchronize hstream) hstream)))
+  ([sync]
+   (synchronize* sync))
+  ([prom hstream]
+   (with-release [hostfn (record-deref* prom hstream)]
+     (deref prom))))
 
-(defn add-host-fn!
+(defn launch-fn!
   "Adds host function `f` to a compute stream, with optional `data` related to the call.
-  If `data` is not provided, places `hstream` under data.
+  If `data` is not provided, places `hstream` under data. The function returns a native host function.
+  Native host functions are a finite resource, and if you (or GC, but don't count on it) don't release
+  it as soon as possible, it may quickly be depleted.
   "
-  ([hstream f data]
-   (add-host-fn* hstream f (safe data))
-   hstream)
-  ([hstream f]
-   (add-host-fn* hstream f hstream)
-   hstream))
-
-(defn listen!
-  "Adds a host function listener to a compute stream, with optional `data` related to the call,
-  and connects it to a Clojure channel `chan`. If `data` is not provided, places `hstream` under data.
-  "
-  ([hstream ch data]
-   (let [data (safe (pointer data))]
-     (add-host-fn* hstream (host-fn* data ch) data)
-     hstream))
-  ([hstream ch]
-   (add-host-fn* hstream (host-fn* hstream ch) hstream)
-   hstream))
+  [^CUstream_st hstream f & data]
+  (let-release [hostfn (CUHostFn. (host-fn* data f))]
+    (launch-host-fn* hstream hostfn (if data (safe (pointer data)) hstream))))
 
 (defn wait-event!
   "Makes a compute stream `hstream` wait on an event `ev`.
@@ -738,13 +731,13 @@
     (with-check (cudart/cuEventElapsedTime res start-event end-event) (aget res 0))))
 
 (defn record!
-  "Records an even! `ev` on optional `stream`.
+  "Records an event or promise `ev` on optional `stream`.
   See [CUDA Event Management](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__EVENT.html)
   "
-  ([^CUstream_st stream ^CUevent_st event]
-   (with-check (cudart/cuEventRecord event stream) stream))
-  ([^CUevent_st event]
-   (with-check (cudart/cuEventRecord event nil) default-stream)))
+  ([^CUevent_st ev ^CUstream_st hstream]
+   (with-check (cudart/cuEventRecord ev hstream) hstream))
+  ([ev]
+   (record! ev default-stream)))
 
 ;; ================== Peer Context Memory Access =============================
 

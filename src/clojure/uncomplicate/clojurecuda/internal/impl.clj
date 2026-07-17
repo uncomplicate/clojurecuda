@@ -8,7 +8,8 @@
 
 (ns ^{:author "Dragan Djuric"}
     uncomplicate.clojurecuda.internal.impl
-  (:require [uncomplicate.commons
+  (:require [clojure.core.async :refer [io-thread]]
+            [uncomplicate.commons
              [core :refer [with-release let-release Releaseable release info Bytes bytesize Entries
                            size* size]]
              [utils :as cu :refer [dragan-says-ex]]]
@@ -16,22 +17,25 @@
             [uncomplicate.clojure-cpp :as cpp
              :refer [put-entry! pointer safe int-pointer* pointer-pointer* byte-pointer* size-t-pointer*
                      get-entry get-string null? long-pointer* PointerCreator TypedPointerCreator
-                     clong-pointer* short-pointer* char-pointer* double-pointer* float-pointer* pointer-seq
-                     capacity! address Accessor get! put! get-keyword]]
+                     clong-pointer* short-pointer* char-pointer* double-pointer* float-pointer*
+                     capacity! address Accessor get! put! get-keyword pointer-seq pointer-vec]]
             [uncomplicate.clojurecuda.internal
              [constants :refer [cu-result-codes jit-input-types jit-options nvrtc-result-codes]]
-             [utils :refer [with-check]]]
-            [clojure.core.async :refer [go >!]])
-  (:import java.nio.file.Path
-           java.io.File
-           [clojure.lang IFn AFn Seqable]
-           [org.bytedeco.javacpp Pointer BytePointer PointerPointer LongPointer IntPointer]
+             [utils :refer [with-check]]])
+  (:import java.nio.file.Path java.io.File java.lang.Runnable
+           [java.util.concurrent Callable ConcurrentHashMap]
+           [clojure.lang IFn AFn Seqable Keyword IDeref IBlockingDeref]
+           [org.bytedeco.javacpp Pointer BytePointer PointerPointer LongPointer IntPointer
+            ShortPointer BytePointer DoublePointer FloatPointer]
            [org.bytedeco.cuda.global cudart nvrtc]
            [org.bytedeco.cuda.cudart CUctx_st CUstream_st CUevent_st CUmod_st CUlinkState_st
             CUctxCreateParams]
            org.bytedeco.cuda.nvrtc._nvrtcProgram
            [uncomplicate.clojure_cpp StringPointer KeywordPointer]
-           [uncomplicate.clojurecuda.internal.javacpp CUHostFn CUStreamCallback]))
+           [uncomplicate.clojurecuda.internal.javacpp CUHostFn]))
+
+(defprotocol Synchronizable
+  (synchronize* [this]))
 
 (defprotocol CUPointer
   (cu-address* [this])
@@ -259,6 +263,11 @@
     (link-add-data* link-state type (ptx* program) "unnamed" opts vals)))
 
 ;; =================== Context Management ==================================
+
+(extend-type CUctx_st
+  Synchronizable
+  (synchronize* [this]
+    (with-check (cudart/cuCtxSynchronize_v2 (safe this)) this)))
 
 (defn context*
   "Creates a CUDA context on the `device` using raw integer `flags`.
@@ -844,6 +853,11 @@
 
 ;; ================== Stream Management ======================================
 
+(extend-type CUstream_st
+  Synchronizable
+  (synchronize* [this]
+    (with-check (cudart/cuStreamSynchronize this) this)))
+
 (defn stream*
   "Create a stream using an optional `priority` and an integer `flag`.
   See [cuStreamCreate](http://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__STREAM.html)
@@ -866,41 +880,78 @@
     CUevent_st (cudart/cuEventQuery obj)
     cudart/CUDA_ERROR_NOT_READY))
 
-(defrecord StreamCallbackInfo [status data])
-
-(deftype StreamCallback [ch]
-  IFn
-  (invoke [_ _ status data]
-    (go (>! ch (->StreamCallbackInfo (get cu-result-codes status status) (extract data)))))
-  (applyTo [this xs]
-    (AFn/applyToHelper this xs)))
-
 (defprotocol HostFn
-  (host-fn* [type ch]))
+  (host-fn* [type f]))
 
 (extend-type KeywordPointer
   HostFn
-  (host-fn* [_ ch]
+  (host-fn* [_ f]
     (fn [data]
-      (go (>! ch (get-keyword (byte-pointer* data)))))))
+      (io-thread
+       (f (get-keyword (byte-pointer* data)))))))
 
 (extend-type StringPointer
   HostFn
-  (host-fn* [_ ch]
+  (host-fn* [_ f]
     (fn [data]
-      (go (>! ch (get-string (byte-pointer* data)))))))
+      (io-thread
+       (f (get-string (byte-pointer* data)))))))
+
+(extend-type IntPointer
+  HostFn
+  (host-fn* [_ f]
+    (fn [data]
+      (io-thread
+       (f (pointer-vec data))))))
+
+(extend-type LongPointer
+  HostFn
+  (host-fn* [_ f]
+    (fn [data]
+      (io-thread
+       (f (pointer-vec data))))))
+
+(extend-type ShortPointer
+  HostFn
+  (host-fn* [_ f]
+    (fn [data]
+      (io-thread
+       (f (pointer-vec data))))))
+
+(extend-type BytePointer
+  HostFn
+  (host-fn* [_ f]
+    (fn [data]
+      (io-thread
+       (f (pointer-vec data))))))
+
+(extend-type FloatPointer
+  HostFn
+  (host-fn* [_ f]
+    (fn [data]
+      (io-thread
+       (f (pointer-vec data))))))
+
+(extend-type DoublePointer
+  HostFn
+  (host-fn* [_ f]
+    (fn [data]
+      (io-thread
+       (f (pointer-vec data))))))
 
 (extend-type Pointer
   HostFn
-  (host-fn* [_ ch]
+  (host-fn* [_ f]
     (fn [data]
-      (go (>! ch data)))))
+      (io-thread
+       (f data)))))
 
-(defn add-host-fn*
-  [^CUstream_st hstream ^IFn f ^Pointer data]
-  (let-release [hostfn (CUHostFn. f)]
-    (with-check (cudart/cuLaunchHostFunc hstream hostfn data)
-      hstream)))
+(extend-type IDeref
+  HostFn
+  (host-fn* [r f]
+    (fn [_]
+      (io-thread
+       (f r true)))))
 
 (defn attach-mem*
   "Attach memory of `byte-size`, specified by an integer `flag` to a `hstream` asynchronously.
@@ -909,7 +960,22 @@
   ([^CUstream_st hstream mem byte-size flag]
    (with-check (cudart/cuStreamAttachMemAsync hstream mem byte-size flag) hstream)))
 
+(defn launch-host-fn* [^CUstream_st hstream ^CUHostFn hostfn ^Pointer data]
+  (with-check (cudart/cuLaunchHostFunc hstream hostfn (or data hstream))
+    hostfn))
+
+(defn record-deref* [prom hstream]
+  (let-release [hostfn (CUHostFn. (fn [_]
+                                    (io-thread
+                                     (deliver prom true))))]
+    (launch-host-fn* hstream hostfn nil)))
+
 ;; ================== Event Management =======================================
+
+(extend-type CUevent_st
+  Synchronizable
+  (synchronize* [ev]
+    (with-check (cudart/cuEventSynchronize (safe ev)) ev)))
 
 (defn event*
   "Creates an event specified by integer `flags`.
@@ -963,7 +1029,7 @@
 (defmethod print-method CUlinkState_st [p w]
   (format-pointer "LinkState" p w))
 
-(defmethod print-method _nvrtcProgram [p w]
+(defmethod print-method _nvrtcProgram [p ^java.io.Writer w]
   (format-pointer "Program" p w))
 
 (defmethod print-method CUDevicePtr [p w ^java.io.Writer w]

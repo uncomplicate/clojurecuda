@@ -8,7 +8,7 @@
 (ns uncomplicate.clojurecuda.core-test
   (:require [midje.sweet :refer [facts => throws truthy]]
             [clojure.java.io :as io]
-            [clojure.core.async :refer [chan <!!]]
+            [clojure.core.async :refer [chan <!! io-thread close!]]
             [uncomplicate.commons.core
              :refer [release with-release size bytesize let-release releaseable]]
             [uncomplicate.clojure-cpp :as cpp
@@ -195,21 +195,44 @@
 
 (with-context (context (device 0) :map-host)
   (facts
-    "Host functions."
-    (let [ch (chan)]
+    "Event-based synchronization."
+    (let [ch (chan)
+          size 1000000]
       (with-release [strm (stream :non-blocking)
-                     cuda1 (mem-alloc-runtime Float/BYTES)
-                     cuda2 (mem-alloc-runtime Float/BYTES)
-                     host1 (float-array [163.0])
-                     host2 (float-pointer [12])
-                     ch (chan)]
-        (listen! strm ch :host)
+                     cuda1 (mem-alloc-runtime (* Float/BYTES size))
+                     cuda2 (mem-alloc-runtime (* Float/BYTES size))
+                     host1 (float-array (repeat size 163.0))
+                     host2 (mem-alloc-pinned (* Float/BYTES size) :float)
+                     sync (event :disable-timing)]
         (memcpy-host! host1 cuda1 strm) => cuda1
         (memcpy! cuda1 cuda2 strm) => cuda2
-        (synchronize! strm)
-        (memcpy-host! cuda2 (float-array 1) strm) => (throws Exception)
-        (get-entry (memcpy-host! cuda2 host2 strm) 0) => 163.0
-        (<!! ch) => :host))))
+        (get-entry host2 (dec size)) => 0.0
+        (memcpy! cuda2 host2 strm)
+        (ready? sync) => false
+        (record! sync strm)
+        (synchronize! sync)
+        (get-entry host2 (dec size)) => 163.0
+        (memcpy-host! cuda2 (float-array size) strm) => (throws Exception)
+        (synchronize! strm)))))
+
+(with-context (context (device 0) :map-host)
+  (facts
+    "HostFn-based synchronization."
+    (let [ch (chan)
+          size 1000000]
+      (with-release [strm (stream :non-blocking)
+                     cuda1 (mem-alloc-runtime (* Float/BYTES size))
+                     cuda2 (mem-alloc-runtime (* Float/BYTES size))
+                     host1 (float-array (repeat size 163.0))
+                     host2 (mem-alloc-pinned (* Float/BYTES size) :float)
+                     prom (promise)]
+        (memcpy-host! host1 cuda1 strm) => cuda1
+        (memcpy! cuda1 cuda2 strm) => cuda2
+        (get-entry host2 (dec size)) => 0.0
+        (memcpy! cuda2 host2 strm)
+        (synchronize! prom strm)
+        (get-entry host2 (dec size)) => 163.0
+        (memcpy-host! cuda2 (float-array size) strm) => (throws Exception)))))
 
 ;; =============== Memory Management Tests ==============================================
 
